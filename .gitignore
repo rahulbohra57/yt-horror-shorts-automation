@@ -8,4 +8,8 @@ __pycache__/
 dist/
 build/
 .venv/
+*.log
+logs/
 venv/
+*.log
+logs/
