@@ -1,6 +1,7 @@
 import json
-import random
 import logging
+import random
+import re
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -10,10 +11,16 @@ TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 
 class StoryEngine:
     def __init__(self):
-        with open(TEMPLATES_DIR / "hooks.json") as f:
-            self._hooks = json.load(f)["hooks"]
-        with open(TEMPLATES_DIR / "niches.json") as f:
-            self._niches = json.load(f)
+        try:
+            with open(TEMPLATES_DIR / "hooks.json") as f:
+                self._hooks = json.load(f)["hooks"]
+        except (FileNotFoundError, KeyError) as e:
+            raise RuntimeError(f"Failed to load hooks.json from {TEMPLATES_DIR}: {e}") from e
+        try:
+            with open(TEMPLATES_DIR / "niches.json") as f:
+                self._niches = json.load(f)
+        except FileNotFoundError as e:
+            raise RuntimeError(f"Failed to load niches.json from {TEMPLATES_DIR}: {e}") from e
 
     def generate(self, niche: str) -> dict:
         if niche not in self._niches:
@@ -23,10 +30,11 @@ class StoryEngine:
         hook = random.choice(self._hooks)
         template = random.choice(data["script_templates"])
         pexels_query = random.choice(data["pexels_queries"])
+        # Pick CTA once — used in both the inline {cta} placeholder and the returned dict
+        cta = self._pick(data.get("ctas", ["Subscribe for daily stories."]))
 
-        script = self._fill_template(template, hook, niche, data)
-        title = self._generate_title(hook, niche)
-        cta = self._pick(data.get("ctas", ["Subscribe for more stories."]))
+        script = self._fill_template(template, hook, data, cta)
+        title = self._generate_title(hook)
 
         logger.info(f"Generated script for niche={niche}, words={len(script.split())}")
         return {
@@ -39,14 +47,13 @@ class StoryEngine:
             "seo": self._generate_seo(title, niche),
         }
 
-    def _fill_template(self, template: str, hook: str, niche: str, data: dict) -> str:
-        replacements = {"hook": hook}
+    def _fill_template(self, template: str, hook: str, data: dict, cta: str) -> str:
+        replacements = {"hook": hook, "cta": cta}
         field_map = {
             "character": "characters",
             "action": "actions",
             "conflict": "conflicts",
             "moral_lesson": "lessons",
-            "cta": "ctas",
             "clue": "clues",
             "red_herring": "red_herrings",
             "twist": "twists",
@@ -65,14 +72,22 @@ class StoryEngine:
         result = template
         for k, v in replacements.items():
             result = result.replace("{" + k + "}", v)
-        return result
+
+        return self._clean_script(result)
+
+    def _clean_script(self, text: str) -> str:
+        text = re.sub(r'\.{2,}(?!\.)|\.\s+\.', '.', text)
+        text = re.sub(r'\.\s+([a-z])', lambda m: '. ' + m.group(1).upper(), text)
+        text = text[0].upper() + text[1:] if text else text
+        return text.strip()
 
     def _pick(self, lst: list) -> str:
         return random.choice(lst) if lst else ""
 
-    def _generate_title(self, hook: str, niche: str) -> str:
-        base = hook.replace("...", "").strip().rstrip(".")
-        return f"{base} #shorts"
+    def _generate_title(self, hook: str) -> str:
+        # Preserve ellipsis for cliffhanger effect; apply Title Case (YouTube standard)
+        base = hook.rstrip(".")
+        return f"{base.title()} #Shorts"
 
     def _generate_seo(self, title: str, niche: str) -> dict:
         base_tags = ["#shorts", "#story", "#viral", "#ytshorts"]

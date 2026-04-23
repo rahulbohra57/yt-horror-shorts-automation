@@ -3,7 +3,8 @@
     "keywords": ["kindness", "honesty", "courage", "sacrifice", "redemption"],
     "pexels_queries": ["people helping", "community kindness", "family reunion", "elderly care"],
     "script_templates": [
-      "{hook} {character} had always {action}. But one day, everything changed. {conflict}. In that moment, {character} realized the truth: {moral_lesson}. Remember: {cta}."
+      "{hook} {character} had always {action}. But one day, everything changed. {conflict}. In that moment, {character} realized the truth: {moral_lesson}. Remember: {cta}.",
+      "{hook} For years, {character} believed that {action} was the only way. Then {conflict}. That single moment changed everything. {moral_lesson}. {cta}."
     ],
     "characters": ["an old man", "a young woman", "a schoolboy", "a mother", "a stranger"],
     "actions": ["ignored the poor", "chased money", "lied to survive", "kept a secret", "avoided the truth"],
@@ -14,10 +15,10 @@
       "A sudden illness forced them to face their choices."
     ],
     "lessons": [
-      "kindness is never wasted.",
-      "the truth always finds its way out.",
-      "what you give always comes back.",
-      "real wealth is in relationships, not money."
+      "Kindness is never wasted.",
+      "The truth always finds its way out.",
+      "What you give always comes back.",
+      "Real wealth is in relationships, not money."
     ],
     "ctas": ["Subscribe for more stories that touch the heart.", "Follow for daily moral stories."]
   },
@@ -25,7 +26,8 @@
     "keywords": ["disappearance", "secret", "clue", "twist", "reveal"],
     "pexels_queries": ["dark alley mystery", "detective investigation", "abandoned house", "mysterious forest"],
     "script_templates": [
-      "{hook} {character} discovered {clue}. Everyone thought they knew the answer. But {red_herring}. The real truth? {twist}. No one saw it coming. Subscribe for the next episode."
+      "{hook} {character} discovered {clue}. Everyone thought they knew the answer. But {red_herring}. The real truth? {twist}. No one saw it coming. {cta}.",
+      "{hook} The case looked simple. {character} found {clue}. But then {red_herring}. The truth was darker than anyone imagined. {twist}. {cta}."
     ],
     "characters": ["a detective", "a journalist", "a teenager", "a widow", "a night watchman"],
     "clues": [
@@ -44,13 +46,15 @@
       "the missing person never existed.",
       "the victim had staged the whole thing.",
       "the answer was in plain sight all along."
-    ]
+    ],
+    "ctas": ["Subscribe for the next episode.", "Follow for daily mystery stories."]
   },
   "horror": {
     "keywords": ["darkness", "fear", "haunted", "shadow", "whisper"],
     "pexels_queries": ["dark forest night", "empty corridor", "haunted building", "fog night"],
     "script_templates": [
-      "{hook} {character} was alone in the house. {setup}. Then {escalation}. And when they finally turned on the light... {reveal}. Sleep tight. If you can."
+      "{hook} {character} was alone in the house. {setup}. Then {escalation}. And when they finally turned on the light... {reveal}. Sleep tight. If you can.",
+      "{hook} Nobody warned {character} about the house. {setup}. At first, they ignored it. Then {escalation}. What they found... {reveal}. Follow if you dare."
     ],
     "characters": ["a babysitter", "a security guard", "a new homeowner", "a lone hiker", "a night nurse"],
     "setups": [
@@ -70,13 +74,15 @@
       "the door had been locked from the inside.",
       "the face in the mirror wasn't theirs.",
       "the voicemail was recorded after they died."
-    ]
+    ],
+    "ctas": ["Subscribe for daily horror stories.", "Follow for more stories that will keep you up at night."]
   },
   "motivation": {
     "keywords": ["failure", "comeback", "discipline", "success", "mindset"],
     "pexels_queries": ["person running sunrise", "success businessman", "training gym", "mountain climber"],
     "script_templates": [
-      "{hook} {character} had lost everything. {low_point}. But instead of giving up, {action}. {result}. Your comeback starts today. Subscribe for daily motivation."
+      "{hook} {character} had lost everything. {low_point}. But instead of giving up, {action}. {result}. Your comeback starts today. {cta}.",
+      "{hook} Everyone called {character} a failure. {low_point}. But they made one decision that changed everything. {action}. {result}. {cta}."
     ],
     "characters": ["a fired executive", "a broke student", "a retired athlete", "a single parent", "a failed entrepreneur"],
     "low_points": [
@@ -96,13 +102,15 @@
       "Today they mentor thousands.",
       "The same people who doubted them now ask for advice.",
       "They never looked back."
-    ]
+    ],
+    "ctas": ["Subscribe for daily motivation.", "Follow for stories that will change your mindset."]
   },
   "relationship": {
     "keywords": ["love", "betrayal", "forgiveness", "loyalty", "trust"],
     "pexels_queries": ["couple sunset", "romantic dinner", "breakup sadness", "reconciliation"],
     "script_templates": [
-      "{hook} {character} thought they knew {partner}. {setup}. But then {conflict}. And in that moment, {realization}. Love is never what it seems."
+      "{hook} {character} thought they knew {partner}. {setup}. But then {conflict}. And in that moment, {realization}. Love is never what it seems.",
+      "{hook} {character} and {partner} seemed perfect together. {setup}. Until {conflict}. That was the day {realization}. {cta}."
     ],
     "characters": ["a husband", "a wife", "a best friend", "a colleague", "a childhood sweetheart"],
     "partners": ["their partner of 10 years", "their closest friend", "the person they trusted most"],
@@ -121,6 +129,7 @@
       "some people enter your life to teach you, not to stay.",
       "trust, once broken, rebuilds differently.",
       "the truth always finds its moment."
-    ]
+    ],
+    "ctas": ["Subscribe for more relationship stories.", "Follow for daily stories about love and life."]
   }
 }
