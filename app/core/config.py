@@ -1,5 +1,5 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pathlib import Path
 
 
 class Settings(BaseSettings):
@@ -13,8 +13,8 @@ class Settings(BaseSettings):
     DB_PATH: str = "app/db/shorts.db"
     MEDIA_CACHE_DIR: str = "/tmp/pexels_cache"
     OUTPUT_DIR: str = "/tmp/shorts_output"
-    SCHEDULE_HOUR: int = 9
-    SCHEDULE_MINUTE: int = 0
+    SCHEDULE_HOUR: int = Field(default=9, ge=0, le=23)
+    SCHEDULE_MINUTE: int = Field(default=0, ge=0, le=59)
 
 
 settings = Settings()
