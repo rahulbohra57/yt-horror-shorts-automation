@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>YT Shorts Bot</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+</head>
+<body class="bg-gray-950 text-white min-h-screen" x-data="app()" x-init="init()">
+
+  <div class="max-w-4xl mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold mb-2">YT Shorts Bot</h1>
+    <p class="text-gray-400 mb-8">Automated faceless YouTube Shorts generator — 100% free</p>
+
+    <!-- Generate Form -->
+    <div class="bg-gray-900 rounded-xl p-6 mb-8 border border-gray-800">
+      <h2 class="text-xl font-semibold mb-4">Generate New Short</h2>
+      <div class="flex gap-4 flex-wrap">
+        <select x-model="selectedNiche"
+          class="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white flex-1">
+          <template x-for="niche in niches" :key="niche">
+            <option :value="niche" x-text="niche.charAt(0).toUpperCase() + niche.slice(1)"></option>
+          </template>
+        </select>
+        <label class="flex items-center gap-2 text-gray-300">
+          <input type="checkbox" x-model="uploadToYT" class="w-4 h-4 rounded"/>
+          Upload to YouTube
+        </label>
+        <button @click="generate()"
+          :disabled="generating"
+          class="bg-red-600 hover:bg-red-700 disabled:opacity-50 px-6 py-2 rounded-lg font-semibold transition">
+          <span x-show="!generating">Generate</span>
+          <span x-show="generating">Generating...</span>
+        </button>
+      </div>
+      <div x-show="lastJob" class="mt-4 p-3 bg-gray-800 rounded-lg text-sm">
+        <span class="text-green-400">Job queued</span>
+        — Job ID: <span x-text="lastJob" class="font-mono text-yellow-300"></span>
+      </div>
+    </div>
+
+    <!-- Shorts History -->
+    <div class="bg-gray-900 rounded-xl p-6 border border-gray-800">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-semibold">Video History</h2>
+        <button @click="loadShorts()" class="text-sm text-blue-400 hover:text-blue-300">Refresh</button>
+      </div>
+
+      <div x-show="shorts.length === 0" class="text-gray-500 text-center py-8">
+        No shorts generated yet. Start your first one above!
+      </div>
+
+      <div class="space-y-3">
+        <template x-for="s in shorts" :key="s.id">
+          <div class="bg-gray-800 rounded-lg p-4 flex justify-between items-start">
+            <div class="flex-1 min-w-0">
+              <div class="font-medium truncate" x-text="s.title || '(generating...)'"></div>
+              <div class="text-sm text-gray-400 mt-1">
+                <span x-text="s.niche" class="capitalize"></span>
+                · <span x-text="s.created_at ? new Date(s.created_at).toLocaleString() : ''"></span>
+              </div>
+              <div x-show="s.error_message" class="text-red-400 text-xs mt-1" x-text="s.error_message"></div>
+            </div>
+            <div class="ml-4 flex flex-col items-end gap-2">
+              <span :class="{
+                'bg-yellow-900 text-yellow-300': ['pending','generating','rendering','uploading'].includes(s.status),
+                'bg-green-900 text-green-300': s.status === 'done',
+                'bg-red-900 text-red-300': s.status === 'failed'
+              }" class="text-xs px-2 py-1 rounded-full" x-text="s.status"></span>
+              <a x-show="s.youtube_url" :href="s.youtube_url" target="_blank"
+                class="text-xs text-red-400 hover:text-red-300">Watch</a>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function app() {
+      return {
+        niches: [],
+        selectedNiche: 'moral',
+        uploadToYT: true,
+        generating: false,
+        lastJob: null,
+        shorts: [],
+
+        async init() {
+          const r = await fetch('/api/niches');
+          const d = await r.json();
+          this.niches = d.niches;
+          this.selectedNiche = this.niches[0];
+          await this.loadShorts();
+          setInterval(() => this.loadShorts(), 10000);
+        },
+
+        async generate() {
+          this.generating = true;
+          this.lastJob = null;
+          try {
+            const r = await fetch('/api/generate', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({niche: this.selectedNiche, upload: this.uploadToYT})
+            });
+            const d = await r.json();
+            this.lastJob = d.job_id;
+            await this.loadShorts();
+          } finally {
+            this.generating = false;
+          }
+        },
+
+        async loadShorts() {
+          const r = await fetch('/api/shorts');
+          this.shorts = await r.json();
+        }
+      }
+    }
+  </script>
+</body>
+</html>
