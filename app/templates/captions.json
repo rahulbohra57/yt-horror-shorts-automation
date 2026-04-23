@@ -1,0 +1,26 @@
+{
+  "default": {
+    "font_size": 56,
+    "color": "white",
+    "outline_color": "black",
+    "outline_width": 3,
+    "alignment": 2,
+    "margin_v": 80
+  },
+  "bold_yellow": {
+    "font_size": 60,
+    "color": "yellow",
+    "outline_color": "black",
+    "outline_width": 4,
+    "alignment": 2,
+    "margin_v": 80
+  },
+  "top_white": {
+    "font_size": 52,
+    "color": "white",
+    "outline_color": "black",
+    "outline_width": 3,
+    "alignment": 8,
+    "margin_v": 80
+  }
+}
