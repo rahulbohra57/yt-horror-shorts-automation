@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: yt-shorts-bot
+    env: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt && apt-get install -y ffmpeg"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PEXELS_API_KEY
+        sync: false
+      - key: YOUTUBE_CLIENT_ID
+        sync: false
+      - key: YOUTUBE_CLIENT_SECRET
+        sync: false
+      - key: YOUTUBE_REFRESH_TOKEN
+        sync: false
+      - key: CHANNEL_NAME
+        sync: false
+    disk:
+      name: shorts-data
+      mountPath: /data
+      sizeGB: 1
