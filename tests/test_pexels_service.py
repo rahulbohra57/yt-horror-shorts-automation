@@ -1,15 +1,19 @@
+import hashlib
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 from app.services.pexels_service import PexelsService
+
 
 @pytest.fixture
 def service():
     return PexelsService(api_key="test_key", cache_dir="/tmp/test_pexels_cache")
 
-def test_build_search_url(service):
+
+def test_build_search_url_encodes_spaces(service):
     url = service._build_url("people walking", orientation="portrait")
-    assert "people" in url
+    assert "people+walking" in url
     assert "orientation=portrait" in url
+
 
 def test_search_returns_list_on_mock(service):
     mock_response = {
@@ -25,6 +29,7 @@ def test_search_returns_list_on_mock(service):
     assert isinstance(results, list)
     assert len(results) == 1
     assert "url" in results[0]
+
 
 def test_portrait_preferred_over_landscape(service):
     mock_response = {
@@ -42,21 +47,35 @@ def test_portrait_preferred_over_landscape(service):
         results = service.search_videos("nature", count=1)
     assert "portrait" in results[0]["url"]
 
+
 def test_empty_api_key_raises(service):
     bad_service = PexelsService(api_key="", cache_dir="/tmp/test")
     with pytest.raises(ValueError, match="PEXELS_API_KEY"):
         bad_service.search_videos("test")
 
-def test_download_uses_cache(service, tmp_path):
-    # Seed a fake cached file
-    import hashlib
+
+def test_download_uses_cache(tmp_path):
     cache_dir = tmp_path / "cache"
     cache_dir.mkdir()
     url = "https://example.com/video.mp4"
-    cache_key = hashlib.md5(url.encode()).hexdigest()
+    cache_key = hashlib.sha256(url.encode()).hexdigest()
     cached = cache_dir / f"{cache_key}.mp4"
     cached.write_bytes(b"fake_video_data")
 
     svc = PexelsService(api_key="test_key", cache_dir=str(cache_dir))
     result = svc.download_video(url)
     assert result == str(cached)
+
+
+def test_partial_file_cleaned_on_failure(tmp_path):
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    url = "https://example.com/bad.mp4"
+    svc = PexelsService(api_key="test_key", cache_dir=str(cache_dir))
+
+    with patch("requests.get", side_effect=Exception("network error")):
+        with pytest.raises(RuntimeError):
+            svc.download_video(url)
+
+    # No partial file should remain
+    assert list(cache_dir.iterdir()) == []

@@ -8,6 +8,8 @@ from urllib.parse import quote_plus
 logger = logging.getLogger(__name__)
 
 PEXELS_VIDEO_URL = "https://api.pexels.com/videos/search"
+# Fetch more than needed so _extract_best can find count valid files even if some have no usable quality
+_PEXELS_PER_PAGE = 15
 
 
 class PexelsService:
@@ -28,7 +30,7 @@ class PexelsService:
         return results
 
     def download_video(self, video_url: str) -> str:
-        cache_key = hashlib.md5(video_url.encode()).hexdigest()
+        cache_key = hashlib.sha256(video_url.encode()).hexdigest()
         cached_path = self.cache_dir / f"{cache_key}.mp4"
         if cached_path.exists():
             logger.info(f"Cache hit: {cached_path}")
@@ -44,13 +46,23 @@ class PexelsService:
                         f.write(chunk)
                 logger.info(f"Downloaded to {cached_path}")
                 return str(cached_path)
+            except requests.HTTPError as e:
+                cached_path.unlink(missing_ok=True)
+                if e.response is not None and e.response.status_code < 500:
+                    raise RuntimeError(f"Non-retriable HTTP {e.response.status_code}: {video_url}") from e
+                logger.warning(f"Download attempt {attempt+1} server error: {e}")
             except Exception as e:
+                cached_path.unlink(missing_ok=True)
                 logger.warning(f"Download attempt {attempt+1} failed: {e}")
+            if attempt < 2:
                 sleep(2 ** attempt)
         raise RuntimeError(f"Failed to download video after 3 attempts: {video_url}")
 
     def _build_url(self, query: str, orientation: str = "portrait") -> str:
-        return f"{PEXELS_VIDEO_URL}?query={quote_plus(query)}&orientation={orientation}&per_page=15&size=medium"
+        return (
+            f"{PEXELS_VIDEO_URL}?query={quote_plus(query)}"
+            f"&orientation={orientation}&per_page={_PEXELS_PER_PAGE}&size=medium"
+        )
 
     def _fetch(self, url: str, count: int) -> list[dict]:
         headers = {"Authorization": self.api_key}
@@ -60,14 +72,20 @@ class PexelsService:
                 resp.raise_for_status()
                 data = resp.json()
                 return self._extract_best(data.get("videos", []), count)
+            except requests.HTTPError as e:
+                if e.response is not None and e.response.status_code < 500:
+                    logger.error(f"Pexels non-retriable error {e.response.status_code}: {e}")
+                    return []
+                logger.warning(f"Pexels fetch attempt {attempt+1} server error: {e}")
             except Exception as e:
                 logger.warning(f"Pexels fetch attempt {attempt+1} failed: {e}")
+            if attempt < 2:
                 sleep(2 ** attempt)
         return []
 
     def _extract_best(self, videos: list, count: int) -> list[dict]:
         results = []
-        for video in videos[:count * 2]:
+        for video in videos:  # scan full response — per_page is deliberately over-fetched
             best = self._pick_best_file(video.get("video_files", []))
             if best:
                 results.append({
