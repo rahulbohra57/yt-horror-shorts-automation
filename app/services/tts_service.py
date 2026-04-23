@@ -39,7 +39,8 @@ class TTSService:
         except Exception as e:
             logger.warning(f"edge-tts failed ({e}), falling back to gTTS")
             output_path.unlink(missing_ok=True)  # remove empty/partial file
-            self._gtts_fallback(text, output_path)
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._gtts_fallback, text, output_path)
 
         return str(output_path)
 
