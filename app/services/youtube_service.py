@@ -33,17 +33,51 @@ class YouTubeService:
         return url
 
     def _execute_upload(self, request) -> str:
-        for attempt in range(5):
+        max_retries = 5
+        retries = 0
+        while True:
             try:
                 status, response = request.next_chunk()
                 if response:
-                    return response["id"]
+                    if "id" in response:
+                        return response["id"]
+                    raise RuntimeError(f"Unexpected upload response: {response}")
+                if status is not None:
+                    logger.info("YouTube upload progress: %.1f%%", status.progress() * 100)
             except HttpError as e:
-                if e.resp.status in (500, 502, 503, 504):
-                    sleep(2 ** attempt)
+                error_text = ""
+                try:
+                    error_text = e.content.decode("utf-8", errors="ignore")
+                except Exception:
+                    error_text = str(e)
+                if e.resp.status in (500, 502, 503, 504) and retries < max_retries:
+                    wait_s = 2 ** retries
+                    retries += 1
+                    logger.warning(
+                        "Retriable YouTube upload error (status=%s, attempt=%s/%s): %s",
+                        e.resp.status,
+                        retries,
+                        max_retries,
+                        error_text[:500],
+                    )
+                    sleep(wait_s)
                     continue
-                raise
-        raise RuntimeError("Upload failed after retries")
+                raise RuntimeError(
+                    f"YouTube upload failed with status={e.resp.status}: {error_text[:800]}"
+                ) from e
+            except Exception as e:
+                if retries < max_retries:
+                    wait_s = 2 ** retries
+                    retries += 1
+                    logger.warning(
+                        "Transient upload error (attempt=%s/%s): %s",
+                        retries,
+                        max_retries,
+                        str(e)[:500],
+                    )
+                    sleep(wait_s)
+                    continue
+                raise RuntimeError(f"Upload failed after retries: {e}") from e
 
     def _build_request_body(self, seo: dict, privacy: str = "public") -> dict:
         return {
