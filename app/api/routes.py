@@ -8,7 +8,7 @@ from app.core.models import JobStatus, Short
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-VALID_NICHES = ["moral", "mystery", "horror", "motivation", "relationship"]
+VALID_NICHES = ["horror", "mystery"]
 
 
 class GenerateRequest(BaseModel):

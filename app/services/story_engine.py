@@ -28,14 +28,21 @@ class StoryEngine:
 
         data = self._niches[niche]
         hook = random.choice(self._hooks)
-        template = random.choice(data["script_templates"])
         pexels_query = random.choice(data["pexels_queries"])
-        # Pick CTA once — used in both the inline {cta} placeholder and the returned dict
-        cta = self._pick(data.get("ctas", ["Subscribe for daily stories."]))
 
-        script = self._fill_template(template, hook, data, cta)
+        # Retry up to 3 times to land in the 160–210 word range (≈52–58s at +50% TTS)
+        script = ""
+        cta = ""
+        for attempt in range(3):
+            template = random.choice(data["script_templates"])
+            cta = self._pick(data.get("ctas", ["Subscribe for daily stories."]))
+            script = self._fill_template(template, hook, data, cta)
+            word_count = len(script.split())
+            if 160 <= word_count <= 210:
+                break
+            logger.debug(f"Script attempt {attempt+1}: {word_count} words, retrying")
+
         title = self._generate_title(hook)
-
         logger.info(f"Generated script for niche={niche}, words={len(script.split())}")
         return {
             "niche": niche,
@@ -43,20 +50,22 @@ class StoryEngine:
             "script": script,
             "title": title,
             "pexels_query": pexels_query,
+            "pexels_queries": data["pexels_queries"],
             "cta": cta,
             "seo": self._generate_seo(title, niche),
         }
 
     def _fill_template(self, template: str, hook: str, data: dict, cta: str) -> str:
         replacements = {"hook": hook, "cta": cta}
+
+        # All single-value arrays in the niche data become template placeholders
         field_map = {
-            "character": "characters",
+            # legacy keys
             "action": "actions",
             "conflict": "conflicts",
             "moral_lesson": "lessons",
             "clue": "clues",
             "red_herring": "red_herrings",
-            "twist": "twists",
             "setup": "setups",
             "escalation": "escalations",
             "reveal": "reveals",
@@ -64,6 +73,29 @@ class StoryEngine:
             "result": "results",
             "partner": "partners",
             "realization": "realizations",
+            # new keys
+            "character": "characters",
+            "dead_person": "dead_persons",
+            "time": "times",
+            "timeframe": "timeframes",
+            "secret_message": "secret_messages",
+            "tense_action": "tense_actions",
+            "discovery": "discoveries",
+            "discovery_detail": "discovery_details",
+            "final_message": "final_messages",
+            "horror_detail": "horror_details",
+            "closing_line": "closing_lines",
+            "turning_point": "turning_points",
+            "lesson": "lessons",
+            "twist": "twists",
+            "victim": "victims",
+            "betrayal": "betrayals",
+            "low_points": "low_points",
+            "decisions": "decisions",
+            "results": "results",
+            "year": "years",
+            "name": "names",
+            "partner_name": "partner_names",
         }
         for placeholder, key in field_map.items():
             if key in data:
@@ -77,7 +109,8 @@ class StoryEngine:
 
     def _clean_script(self, text: str) -> str:
         text = re.sub(r'\.{2,}(?!\.)|\.\s+\.', '.', text)
-        text = re.sub(r'\.\s+([a-z])', lambda m: '. ' + m.group(1).upper(), text)
+        # Capitalize first letter after any sentence-ending punctuation
+        text = re.sub(r'([.?!])\s+([a-z])', lambda m: m.group(1) + ' ' + m.group(2).upper(), text)
         text = text[0].upper() + text[1:] if text else text
         return text.strip()
 

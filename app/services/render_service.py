@@ -1,4 +1,7 @@
 import logging
+import math
+import random
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -6,7 +9,29 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 TARGET_W, TARGET_H = 1080, 1920
-FONT_SIZE = 56
+FONT_SIZE = 62
+
+_BG_AUDIO_DIR = Path(__file__).parent.parent.parent / "background_audio"
+_NICHE_MUSIC_FOLDER = {
+    "horror": "Horror",
+    "mystery": "Mystery",
+}
+
+# (font_path, index) — prefer bold variants
+_FONT_CANDIDATES = [
+    ("/System/Library/Fonts/HelveticaNeue.ttc", 1),   # Helvetica Neue Bold
+    ("/System/Library/Fonts/Helvetica.ttc", 0),
+    ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 0),
+    ("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 0),
+]
+
+def _find_font() -> tuple[str, int] | None:
+    for fc, idx in _FONT_CANDIDATES:
+        if Path(fc).exists():
+            return (fc, idx)
+    return None
+
+_SYSTEM_FONT = _find_font()
 
 # Check once at module load whether the subtitles filter is available
 def _has_subtitles_filter() -> bool:
@@ -14,7 +39,7 @@ def _has_subtitles_filter() -> bool:
         ["ffmpeg", "-filters"],
         capture_output=True, text=True
     )
-    return " subtitles " in result.stdout or "\tsubtitles\t" in result.stdout or "subtitles" in result.stdout
+    return "subtitles" in result.stdout
 
 
 _SUBTITLES_AVAILABLE = _has_subtitles_filter()
@@ -25,21 +50,35 @@ class RenderService:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def render(self, video_paths: list[str], audio_path: str, script: str, job_id: str) -> str:
+    def render(self, video_paths: list[str], audio_path: str, script: str, job_id: str, word_timings: list = None, niche: str = "") -> str:
         """
         Full pipeline:
           1. Merge/crop background video clips to 1080x1920 at audio duration
           2. Burn-in captions (SRT via libass if available, otherwise Pillow overlay)
-          3. Normalize audio loudness to -16 LUFS
+          3. Normalize audio loudness to -16 LUFS, mix in background music
         Returns path to the final MP4.
         """
         output_path = self.output_dir / f"{job_id}.mp4"
+        music_path = self._pick_background_music(niche)
+        if music_path:
+            logger.info(f"Background music: {Path(music_path).name}")
         with tempfile.TemporaryDirectory() as tmp:
             merged_bg = self._merge_and_crop_videos(video_paths, audio_path, tmp)
-            captioned = self._add_captions(merged_bg, script, audio_path, tmp)
-            self._normalize_audio(captioned, str(output_path))
+            captioned = self._add_captions(merged_bg, script, audio_path, tmp, word_timings)
+            self._normalize_audio(captioned, str(output_path), music_path=music_path)
         logger.info(f"Rendered: {output_path}")
         return str(output_path)
+
+    def _pick_background_music(self, niche: str) -> str | None:
+        folder_name = _NICHE_MUSIC_FOLDER.get(niche)
+        if not folder_name:
+            return None
+        folder = _BG_AUDIO_DIR / folder_name
+        if not folder.exists():
+            logger.warning(f"Background audio folder not found: {folder}")
+            return None
+        files = list(folder.glob("*.mp3"))
+        return str(random.choice(files)) if files else None
 
     # ------------------------------------------------------------------
     # Step 1: merge & crop to vertical 9:16
@@ -53,27 +92,48 @@ class RenderService:
             f"crop={TARGET_W}:{TARGET_H},setsar=1"
         )
 
-        if len(video_paths) == 1:
+        # Trim each source video to a random 5-7 s clip from a random start point
+        trimmed = []
+        for i, vp in enumerate(video_paths):
+            try:
+                src_dur = self._get_duration(vp)
+            except Exception:
+                src_dur = 30.0
+            clip_dur = random.uniform(5, 7)
+            clip_dur = min(clip_dur, src_dur)
+            max_start = max(0.0, src_dur - clip_dur - 0.5)
+            start = random.uniform(0, max_start) if max_start > 0 else 0.0
+            t = Path(tmp) / f"clip_{i}.mp4"
             cmd = [
-                "ffmpeg", "-stream_loop", "-1", "-i", video_paths[0],
-                "-t", str(audio_duration),
+                "ffmpeg", "-ss", f"{start:.2f}", "-i", vp,
+                "-t", f"{clip_dur:.2f}",
                 "-vf", scale_crop,
                 "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-                "-an", "-y", str(out)
+                "-pix_fmt", "yuv420p", "-r", "30",
+                "-an", "-y", str(t)
             ]
-        else:
-            concat_list = Path(tmp) / "concat.txt"
-            with open(concat_list, "w") as f:
-                for vp in video_paths:
-                    f.write(f"file '{vp}'\n")
-            cmd = [
-                "ffmpeg", "-f", "concat", "-safe", "0", "-i", str(concat_list),
-                "-t", str(audio_duration),
-                "-vf", scale_crop,
-                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-                "-an", "-y", str(out)
-            ]
+            self._run(cmd)
+            trimmed.append(str(t))
 
+        # Loop the clip sequence until it covers the full audio duration
+        total_clip_dur = sum(
+            self._get_duration(c) for c in trimmed
+        )
+        loops = math.ceil(audio_duration / total_clip_dur) if total_clip_dur > 0 else 1
+        clips_to_concat = trimmed * loops
+
+        concat_list = Path(tmp) / "concat.txt"
+        with open(concat_list, "w") as f:
+            for cp in clips_to_concat:
+                f.write(f"file '{cp}'\n")
+
+        cmd = [
+            "ffmpeg", "-f", "concat", "-safe", "0", "-i", str(concat_list),
+            "-t", str(audio_duration),
+            "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+            "-pix_fmt", "yuv420p", "-r", "30",
+            "-an", "-y", str(out)
+        ]
         self._run(cmd)
         return str(out)
 
@@ -81,25 +141,31 @@ class RenderService:
     # Step 2: add captions
     # ------------------------------------------------------------------
 
-    def _add_captions(self, video_path: str, script: str, audio_path: str, tmp: str) -> str:
+    def _add_captions(self, video_path: str, script: str, audio_path: str, tmp: str, word_timings: list = None) -> str:
         if _SUBTITLES_AVAILABLE:
-            return self._add_captions_ffmpeg(video_path, script, audio_path, tmp)
-        else:
-            logger.info("subtitles filter not available — using Pillow caption overlay")
-            return self._add_captions_pillow(video_path, script, audio_path, tmp)
+            try:
+                return self._add_captions_srt(video_path, script, audio_path, tmp, word_timings)
+            except Exception as e:
+                logger.warning(f"SRT captions failed ({e}), falling back to drawtext")
+        try:
+            return self._add_captions_drawtext(video_path, script, audio_path, tmp, word_timings)
+        except Exception as e:
+            logger.warning(f"drawtext captions failed ({e}), muxing without captions")
+            return self._mux_audio_only(video_path, audio_path, tmp)
 
-    # --- FFmpeg/libass path ---
+    # --- libass / SRT path (when subtitles filter is available) ---
 
-    def _add_captions_ffmpeg(self, video_path: str, script: str, audio_path: str, tmp: str) -> str:
+    def _add_captions_srt(self, video_path: str, script: str, audio_path: str, tmp: str, word_timings: list = None) -> str:
         out = Path(tmp) / "captioned.mp4"
-        srt_path = self._generate_srt(script, audio_path, tmp)
+        srt_path = self._generate_srt(script, audio_path, tmp, word_timings)
         escaped_srt = str(srt_path).replace("\\", "/").replace(":", "\\:")
+        font_arg = f",FontName=Helvetica" if not _SYSTEM_FONT else ""
         cmd = [
             "ffmpeg", "-i", video_path, "-i", audio_path,
             "-vf", (
                 f"subtitles={escaped_srt}:force_style="
                 f"'FontSize={FONT_SIZE},PrimaryColour=&H00FFFFFF,"
-                f"OutlineColour=&H00000000,Outline=3,Alignment=2,MarginV=80'"
+                f"OutlineColour=&H00000000,Outline=3,Alignment=5,MarginV=0{font_arg}'"
             ),
             "-c:v", "libx264", "-preset", "fast", "-crf", "23",
             "-c:a", "aac", "-b:a", "128k",
@@ -108,138 +174,158 @@ class RenderService:
         self._run(cmd)
         return str(out)
 
-    # --- Pillow fallback path ---
+    # --- Pillow PNG overlay path (no drawtext/subtitles filter needed) ---
 
-    def _add_captions_pillow(self, video_path: str, script: str, audio_path: str, tmp: str) -> str:
-        """
-        Renders caption frames as a video using Pillow + FFmpeg overlay.
-        Steps:
-          a) Build a list of (start, end, text) from the script duration.
-          b) Render an RGBA caption overlay video via Pillow → PNG sequence → FFmpeg.
-          c) Overlay it on top of the background video, mux with audio.
-        """
-        try:
-            return self._add_captions_pillow_impl(video_path, script, audio_path, tmp)
-        except Exception as exc:
-            logger.warning(f"Pillow caption overlay failed ({exc}), skipping captions")
-            return self._mux_audio_only(video_path, audio_path, tmp)
+    def _add_captions_drawtext(self, video_path: str, script: str, audio_path: str, tmp: str, word_timings: list = None) -> str:
+        from PIL import Image
 
-    def _add_captions_pillow_impl(self, video_path: str, script: str, audio_path: str, tmp: str) -> str:
-        from PIL import Image, ImageDraw, ImageFont
-        import math
-
-        duration = self._get_duration(audio_path)
-        fps = 30
-        total_frames = math.ceil(duration * fps)
-
-        sentences = [s.strip() for s in script.split(".") if s.strip()]
-        time_per = duration / max(len(sentences), 1)
-        segments = []
-        for i, sentence in enumerate(sentences):
-            start = i * time_per
-            end = min(start + time_per, duration)
-            segments.append((start, end, sentence + "."))
-
-        # Try to load a reasonable font; fall back to default
-        font = None
-        font_candidates = [
-            "/System/Library/Fonts/Helvetica.ttc",
-            "/System/Library/Fonts/Arial.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-        ]
-        for fc in font_candidates:
-            if Path(fc).exists():
-                try:
-                    font = ImageFont.truetype(fc, FONT_SIZE)
-                    break
-                except Exception:
-                    pass
-        if font is None:
-            font = ImageFont.load_default()
-
-        caption_dir = Path(tmp) / "caption_frames"
-        caption_dir.mkdir()
-
-        # Render PNG frames for caption overlay
-        for frame_idx in range(total_frames):
-            t = frame_idx / fps
-            img = Image.new("RGBA", (TARGET_W, TARGET_H), (0, 0, 0, 0))
-            draw = ImageDraw.Draw(img)
-            text = ""
-            for start, end, seg_text in segments:
-                if start <= t < end:
-                    text = seg_text
-                    break
-
-            if text:
-                # Word-wrap to ~24 chars per line
-                words = text.split()
-                lines, line = [], []
-                for w in words:
-                    line.append(w)
-                    if len(" ".join(line)) > 24:
-                        lines.append(" ".join(line[:-1]))
-                        line = [w]
-                if line:
-                    lines.append(" ".join(line))
-
-                line_h = FONT_SIZE + 10
-                block_h = line_h * len(lines)
-                y_start = TARGET_H - 80 - block_h
-
-                for li, ln in enumerate(lines):
-                    # Measure text width
-                    try:
-                        bbox = draw.textbbox((0, 0), ln, font=font)
-                        text_w = bbox[2] - bbox[0]
-                    except Exception:
-                        text_w = len(ln) * (FONT_SIZE // 2)
-                    x = (TARGET_W - text_w) // 2
-                    y = y_start + li * line_h
-
-                    # Outline
-                    for dx in [-3, -2, 0, 2, 3]:
-                        for dy in [-3, -2, 0, 2, 3]:
-                            draw.text((x + dx, y + dy), ln, font=font, fill=(0, 0, 0, 220))
-                    # White fill
-                    draw.text((x, y), ln, font=font, fill=(255, 255, 255, 255))
-
-            frame_path = caption_dir / f"frame_{frame_idx:06d}.png"
-            img.save(str(frame_path))
-
-        # Encode caption PNGs to a video
-        caption_video = Path(tmp) / "captions.mp4"
-        cmd_enc = [
-            "ffmpeg",
-            "-framerate", str(fps),
-            "-i", str(caption_dir / "frame_%06d.png"),
-            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
-            "-pix_fmt", "yuva420p",
-            "-y", str(caption_video)
-        ]
-        # Try yuva420p; if it fails, fall back to overlay via overlay filter on rgba
-        result = subprocess.run(cmd_enc, capture_output=True, text=True)
-        if result.returncode != 0:
-            # Fallback: encode as rgba and use overlay
-            cmd_enc[cmd_enc.index("yuva420p")] = "rgba"
-            self._run(cmd_enc)
-
-        # Overlay captions on background + mux audio
         out = Path(tmp) / "captioned.mp4"
-        cmd_overlay = [
-            "ffmpeg",
-            "-i", video_path,
-            "-i", str(caption_video),
-            "-i", audio_path,
-            "-filter_complex", "[0:v][1:v]overlay=0:0[v]",
-            "-map", "[v]", "-map", "2:a",
+        caption_data = self._get_caption_segments(script, audio_path, word_timings)
+        total_dur = self._get_duration(audio_path)
+        font = self._load_caption_font()
+
+        # Transparent base frame reused for gaps between captions
+        transparent_path = Path(tmp) / "transparent.png"
+        Image.new("RGBA", (TARGET_W, TARGET_H), (0, 0, 0, 0)).save(str(transparent_path))
+
+        # Render one PNG per caption
+        caption_pngs: list[tuple[float, float, str]] = []
+        for i, (start, end, text) in enumerate(caption_data):
+            png_path = Path(tmp) / f"cap_{i:04d}.png"
+            self._render_caption_frame(text, font, png_path)
+            caption_pngs.append((start, end, str(png_path)))
+
+        # Build concat list: transparent gaps + caption images + trailing gap
+        concat_path = Path(tmp) / "cap_concat.txt"
+        lines: list[str] = []
+        prev_end = 0.0
+        for start, end, png_path in caption_pngs:
+            gap = start - prev_end
+            if gap > 0.001:
+                lines += [f"file '{transparent_path}'", f"duration {gap:.4f}"]
+            lines += [f"file '{png_path}'", f"duration {end - start:.4f}"]
+            prev_end = end
+        remaining = total_dur - prev_end
+        if remaining > 0.001:
+            lines += [f"file '{transparent_path}'", f"duration {remaining:.4f}"]
+        lines.append(f"file '{transparent_path}'")   # last entry needs no duration
+        with open(concat_path, "w") as f:
+            f.write("\n".join(lines))
+
+        # Create a single alpha-channel caption video track
+        caption_track = self._build_alpha_caption_track(concat_path, tmp)
+        if caption_track:
+            self._run([
+                "ffmpeg", "-i", video_path, "-i", str(caption_track), "-i", audio_path,
+                "-filter_complex", "[0:v][1:v]overlay=0:0:format=auto:eof_action=endall[vout]",
+                "-map", "[vout]", "-map", "2:a",
+                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                "-c:a", "aac", "-b:a", "128k",
+                "-y", str(out),
+            ])
+        else:
+            # Fallback: chain up to 20 overlay filters
+            self._run_chained_overlays(video_path, audio_path, caption_pngs[:20], out)
+        return str(out)
+
+    def _render_caption_frame(self, text: str, font, path: Path) -> None:
+        from PIL import Image, ImageDraw
+        img = Image.new("RGBA", (TARGET_W, TARGET_H), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        lines = self._wrap_words(text, max_chars=22)
+        line_h = FONT_SIZE + 16
+        total_h = line_h * len(lines)
+        y_start = (TARGET_H - total_h) // 2
+
+        for li, ln in enumerate(lines):
+            try:
+                bbox = draw.textbbox((0, 0), ln, font=font)
+                text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+            except Exception:
+                text_w, text_h = len(ln) * (FONT_SIZE // 2), FONT_SIZE
+            x = (TARGET_W - text_w) // 2
+            y = y_start + li * line_h
+            try:
+                draw.text(
+                    (x, y), ln, font=font,
+                    fill=(255, 255, 255, 255),
+                    stroke_width=3, stroke_fill=(0, 0, 0, 255),
+                )
+            except TypeError:
+                for dx, dy in [(-2,-2),(2,-2),(-2,2),(2,2),(0,-2),(0,2),(-2,0),(2,0)]:
+                    draw.text((x+dx, y+dy), ln, font=font, fill=(0, 0, 0, 255))
+                draw.text((x, y), ln, font=font, fill=(255, 255, 255, 255))
+        img.save(str(path))
+
+    def _build_alpha_caption_track(self, concat_path: Path, tmp: str) -> Path | None:
+        """Encode PNG concat list into an alpha-channel video. Tries ffv1 → qtrle → prores."""
+        attempts = [
+            (Path(tmp) / "cap_track.mkv",  ["-c:v", "ffv1",     "-pix_fmt", "rgba",         "-r", "30"]),
+            (Path(tmp) / "cap_track.mov",  ["-c:v", "qtrle",    "-pix_fmt", "argb",         "-r", "30"]),
+            (Path(tmp) / "cap_prores.mov", ["-c:v", "prores_ks","-profile:v","4444","-pix_fmt","yuva444p10le","-r","30"]),
+        ]
+        for track_path, codec_args in attempts:
+            r = subprocess.run(
+                ["ffmpeg", "-f", "concat", "-safe", "0", "-i", str(concat_path),
+                 *codec_args, "-y", str(track_path)],
+                capture_output=True, text=True,
+            )
+            if r.returncode == 0:
+                logger.info(f"Caption track encoded with {codec_args[1]}: {track_path.name}")
+                return track_path
+            logger.debug(f"Caption codec {codec_args[1]} failed: {r.stderr[-200:]}")
+        return None
+
+    def _run_chained_overlays(
+        self, video_path: str, audio_path: str,
+        caption_pngs: list[tuple[float, float, str]], out: Path,
+    ) -> None:
+        inputs = ["-i", video_path, "-i", audio_path]
+        for _, _, png in caption_pngs:
+            inputs += ["-i", png]
+        n = len(caption_pngs)
+        parts = []
+        for i, (start, end, _) in enumerate(caption_pngs):
+            in_v  = f"[v{i}]" if i > 0 else "[0:v]"
+            out_v = f"[v{i+1}]" if i < n - 1 else "[vout]"
+            img_in = f"[{i + 2}:v]"
+            parts.append(
+                f"{in_v}{img_in}overlay=0:0:format=auto"
+                f":enable=between(t\\,{start:.3f}\\,{end:.3f}){out_v}"
+            )
+        fc = ";".join(parts) if parts else "[0:v]copy[vout]"
+        self._run([
+            "ffmpeg", *inputs,
+            "-filter_complex", fc,
+            "-map", "[vout]", "-map", "1:a",
             "-c:v", "libx264", "-preset", "fast", "-crf", "23",
             "-c:a", "aac", "-b:a", "128k",
-            "-y", str(out)
-        ]
-        self._run(cmd_overlay)
-        return str(out)
+            "-y", str(out),
+        ])
+
+    def _load_caption_font(self):
+        from PIL import ImageFont
+        if _SYSTEM_FONT:
+            font_path, font_idx = _SYSTEM_FONT
+            try:
+                return ImageFont.truetype(font_path, FONT_SIZE, index=font_idx)
+            except Exception:
+                pass
+        return ImageFont.load_default(size=FONT_SIZE)
+
+    @staticmethod
+    def _wrap_words(text: str, max_chars: int = 22) -> list[str]:
+        words = text.split()
+        lines, line = [], []
+        for w in words:
+            if line and len(" ".join(line + [w])) > max_chars:
+                lines.append(" ".join(line))
+                line = [w]
+            else:
+                line.append(w)
+        if line:
+            lines.append(" ".join(line))
+        return lines or [text]
 
     def _mux_audio_only(self, video_path: str, audio_path: str, tmp: str) -> str:
         """Simple mux: video + audio, no captions."""
@@ -256,39 +342,96 @@ class RenderService:
     # Step 3: loudness normalisation
     # ------------------------------------------------------------------
 
-    def _normalize_audio(self, input_path: str, output_path: str):
+    def _normalize_audio(self, input_path: str, output_path: str, music_path: str | None = None):
+        if music_path:
+            audio_filter = (
+                "[0:a]loudnorm=I=-16:TP=-1.5:LRA=11[vo];"
+                "[1:a]volume=0.10[music];"
+                "[vo][music]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+            )
+            cmd = [
+                "ffmpeg", "-i", input_path,
+                "-stream_loop", "-1", "-i", music_path,
+                "-filter_complex", audio_filter,
+                "-map", "0:v", "-map", "[aout]",
+                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                "-pix_fmt", "yuv420p", "-r", "30",
+                "-movflags", "+faststart",
+                "-shortest", "-y", output_path
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                return
+            logger.warning(f"Music mix failed ({result.stderr[-300:]}), falling back to no music")
+
         cmd = [
             "ffmpeg", "-i", input_path,
             "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
-            "-c:v", "copy",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+            "-pix_fmt", "yuv420p", "-r", "30",
+            "-movflags", "+faststart",
             "-y", output_path
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
-            # loudnorm can fail on silence or near-silence (NaN measurements); copy without normalizing
-            logger.warning("loudnorm failed, copying audio without normalization")
+            logger.warning("loudnorm failed, copying without normalization")
             self._run([
-                "ffmpeg", "-i", input_path, "-c", "copy", "-y", output_path
+                "ffmpeg", "-i", input_path,
+                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                "-pix_fmt", "yuv420p", "-r", "30",
+                "-movflags", "+faststart",
+                "-y", output_path
             ])
 
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
 
-    def _generate_srt(self, script: str, audio_path: str, tmp: str) -> Path:
-        duration = self._get_duration(audio_path)
-        sentences = [s.strip() for s in script.split(".") if s.strip()]
+    def _generate_srt(self, script: str, audio_path: str, tmp: str, word_timings: list = None) -> Path:
         srt_path = Path(tmp) / "captions.srt"
-        time_per = duration / max(len(sentences), 1)
-
+        captions = self._get_caption_segments(script, audio_path, word_timings)
         with open(srt_path, "w", encoding="utf-8") as f:
-            for i, sentence in enumerate(sentences):
-                start = i * time_per
-                end = min(start + time_per, duration)
+            for i, (start, end, text) in enumerate(captions):
                 f.write(f"{i + 1}\n")
                 f.write(f"{self._fmt_time(start)} --> {self._fmt_time(end)}\n")
-                f.write(f"{sentence}.\n\n")
+                f.write(f"{text}\n\n")
         return srt_path
+
+    def _get_caption_segments(self, script: str, audio_path: str, word_timings: list = None) -> list:
+        """Returns list of (start_sec, end_sec, text) caption groups — one per sentence."""
+        clean_script = script.replace('"', '').replace('"', '').replace('"', '')
+        sentences = [s.strip() for s in re.split(r'[.?!]', clean_script) if s.strip()]
+        if word_timings and sentences:
+            return self._align_sentences_to_word_timings(sentences, word_timings)
+        duration = self._get_duration(audio_path)
+        time_per = duration / max(len(sentences), 1)
+        return [
+            (i * time_per, min((i + 1) * time_per, duration), s + ".")
+            for i, s in enumerate(sentences)
+        ]
+
+    @staticmethod
+    def _align_sentences_to_word_timings(sentences: list, word_timings: list) -> list:
+        """Map each sentence to word boundary events using TTS-cleaned word count."""
+        captions = []
+        word_idx = 0
+        for sentence in sentences:
+            if word_idx >= len(word_timings):
+                break
+            # Strip characters that _clean_for_tts removes so word counts match TTS
+            cleaned = sentence
+            cleaned = cleaned.replace('“', '').replace('”', '')
+            cleaned = cleaned.replace('‘', '').replace('’', '')
+            cleaned = cleaned.replace('—', ' ').replace('–', ' ')
+            cleaned = re.sub(r'["""]+', '', cleaned)
+            n_words = max(1, len(cleaned.split()))
+            start = word_timings[word_idx]["offset"]
+            end_idx = min(word_idx + n_words - 1, len(word_timings) - 1)
+            tail = word_timings[end_idx]
+            end = tail["offset"] + tail["duration"]
+            captions.append((start, end, sentence + "."))
+            word_idx += n_words
+        return captions
 
     def _get_duration(self, path: str) -> float:
         cmd = [

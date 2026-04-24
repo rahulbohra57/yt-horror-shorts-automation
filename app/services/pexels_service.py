@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import random
 import requests
 from pathlib import Path
 from time import sleep
@@ -22,10 +23,14 @@ class PexelsService:
         if not self.api_key:
             raise ValueError("PEXELS_API_KEY is not set")
 
-        url = self._build_url(query, orientation="portrait")
+        page = random.randint(1, 3)
+        url = self._build_url(query, orientation="portrait", page=page)
         results = self._fetch(url, count)
         if not results:
-            url = self._build_url(query, orientation="landscape")
+            url = self._build_url(query, orientation="landscape", page=page)
+            results = self._fetch(url, count)
+        if not results and page > 1:
+            url = self._build_url(query, orientation="portrait", page=1)
             results = self._fetch(url, count)
         return results
 
@@ -58,10 +63,10 @@ class PexelsService:
                 sleep(2 ** attempt)
         raise RuntimeError(f"Failed to download video after 3 attempts: {video_url}")
 
-    def _build_url(self, query: str, orientation: str = "portrait") -> str:
+    def _build_url(self, query: str, orientation: str = "portrait", page: int = 1) -> str:
         return (
             f"{PEXELS_VIDEO_URL}?query={quote_plus(query)}"
-            f"&orientation={orientation}&per_page={_PEXELS_PER_PAGE}&size=medium"
+            f"&orientation={orientation}&per_page={_PEXELS_PER_PAGE}&size=medium&page={page}"
         )
 
     def _fetch(self, url: str, count: int) -> list[dict]:

@@ -1,135 +1,97 @@
 {
-  "moral": {
-    "keywords": ["kindness", "honesty", "courage", "sacrifice", "redemption"],
-    "pexels_queries": ["people helping", "community kindness", "family reunion", "elderly care"],
-    "script_templates": [
-      "{hook} {character} had always {action}. But one day, everything changed. {conflict}. In that moment, {character} realized the truth: {moral_lesson}. Remember: {cta}.",
-      "{hook} For years, {character} believed that {action} was the only way. Then {conflict}. That single moment changed everything. {moral_lesson}. {cta}."
-    ],
-    "characters": ["an old man", "a young woman", "a schoolboy", "a mother", "a stranger"],
-    "actions": ["ignored the poor", "chased money", "lied to survive", "kept a secret", "avoided the truth"],
-    "conflicts": [
-      "A child stopped him on the road with tears in their eyes.",
-      "A letter arrived that changed everything.",
-      "The very person they hurt appeared to save them.",
-      "A sudden illness forced them to face their choices."
-    ],
-    "lessons": [
-      "Kindness is never wasted.",
-      "The truth always finds its way out.",
-      "What you give always comes back.",
-      "Real wealth is in relationships, not money."
-    ],
-    "ctas": ["Subscribe for more stories that touch the heart.", "Follow for daily moral stories."]
-  },
-  "mystery": {
-    "keywords": ["disappearance", "secret", "clue", "twist", "reveal"],
-    "pexels_queries": ["dark alley mystery", "detective investigation", "abandoned house", "mysterious forest"],
-    "script_templates": [
-      "{hook} {character} discovered {clue}. Everyone thought they knew the answer. But {red_herring}. The real truth? {twist}. No one saw it coming. {cta}.",
-      "{hook} The case looked simple. {character} found {clue}. But then {red_herring}. The truth was darker than anyone imagined. {twist}. {cta}."
-    ],
-    "characters": ["a detective", "a journalist", "a teenager", "a widow", "a night watchman"],
-    "clues": [
-      "a locked diary under the floorboards.",
-      "a photo with a face scratched out.",
-      "an address written in invisible ink.",
-      "a phone that kept ringing from a dead number."
-    ],
-    "red_herrings": [
-      "the neighbor had an alibi.",
-      "the evidence pointed the wrong way.",
-      "the witness was lying for a reason."
-    ],
-    "twists": [
-      "the killer was protecting someone.",
-      "the missing person never existed.",
-      "the victim had staged the whole thing.",
-      "the answer was in plain sight all along."
-    ],
-    "ctas": ["Subscribe for the next episode.", "Follow for daily mystery stories."]
-  },
   "horror": {
     "keywords": ["darkness", "fear", "haunted", "shadow", "whisper"],
-    "pexels_queries": ["dark forest night", "empty corridor", "haunted building", "fog night"],
+    "pexels_queries": ["dark forest night", "empty corridor darkness", "haunted building", "fog night road", "dark bedroom horror", "horror ghost light", "abandoned house dark", "shadow hallway night"],
+    "characters": ["Riya", "Arjun", "Meera", "Kabir", "Priya", "Dev", "Sara", "Nikhil"],
+    "dead_persons": ["their best friend Ananya", "their brother Rohan", "their mother", "their childhood friend Aakash", "their roommate Lisa"],
+    "times": ["2:13 AM", "3:33 AM", "midnight", "1:11 AM", "3:07 AM"],
+    "timeframes": ["three days", "a week", "two months", "four days"],
+    "secret_messages": [
+      "\"Remember the secret under your bed?\"",
+      "\"You never told anyone about that night, did you?\"",
+      "\"I still have the letter you wrote me.\"",
+      "\"The box you buried is still there.\""
+    ],
+    "tense_actions": [
+      "they slowly looked down",
+      "they backed against the wall",
+      "they grabbed the phone with both hands",
+      "they couldn't move"
+    ],
+    "discoveries": [
+      "There was a folded paper lying on the floor",
+      "Something had been moved on the desk",
+      "A photo was placed face-down on the bed",
+      "The door to the bathroom was open"
+    ],
+    "discovery_details": [
+      "It was a childhood drawing made by both of them",
+      "It was a photo from the last day they met",
+      "It was a note written in their handwriting",
+      "It was a polaroid taken inside this very room"
+    ],
+    "final_messages": [
+      "\"I miss you.\"",
+      "\"I never left.\"",
+      "\"Turn around slowly.\"",
+      "\"Don't scream.\""
+    ],
+    "horror_details": [
+      "Wet hair. Broken neck.",
+      "Empty eyes. Pale skin.",
+      "Bare feet. No shadow.",
+      "Cracked lips. A smile."
+    ],
+    "closing_lines": [
+      "\"You never said goodbye.\"",
+      "\"Why didn't you save me?\"",
+      "\"I've been waiting.\"",
+      "\"We can be together now.\""
+    ],
+    "ctas": [
+      "Share this with someone brave enough to watch it alone tonight. New horror drops every single day.",
+      "Follow for a new horror story every night. That ending was just the beginning.",
+      "New horror every day. Subscribe so you never miss one. We will be waiting."
+    ],
     "script_templates": [
-      "{hook} {character} was alone in the house. {setup}. Then {escalation}. And when they finally turned on the light... {reveal}. Sleep tight. If you can.",
-      "{hook} Nobody warned {character} about the house. {setup}. At first, they ignored it. Then {escalation}. What they found... {reveal}. Follow if you dare."
-    ],
-    "characters": ["a babysitter", "a security guard", "a new homeowner", "a lone hiker", "a night nurse"],
-    "setups": [
-      "The power went out at midnight.",
-      "They heard footsteps above — but no one else was home.",
-      "The camera feed showed a figure in the corner.",
-      "The dog refused to enter the room."
-    ],
-    "escalations": [
-      "something knocked three times from inside the wall.",
-      "the door handle turned slowly.",
-      "a child's laugh echoed from the basement.",
-      "a hand appeared under the door."
-    ],
-    "reveals": [
-      "the shadow had been there all along.",
-      "the door had been locked from the inside.",
-      "the face in the mirror wasn't theirs.",
-      "the voicemail was recorded after they died."
-    ],
-    "ctas": ["Subscribe for daily horror stories.", "Follow for more stories that will keep you up at night."]
+      "Every night at exactly {time}, {character} got a message from {dead_person}. Short. Direct. Like nothing had changed. The problem? {dead_person} had been dead for {timeframe}. At first, {character} assumed someone had the old number. A sick prank. But the messages got specific. Only {dead_person} could know these things. {secret_message} {character} went completely still. Heart pounding. Nobody alive knew that. Not one person. {tense_action}. The room felt different suddenly. Smaller. Colder. {discovery}. {character} moved toward it slowly. Every step heavier than the last. Hands already shaking. Picked it up. {discovery_detail}. Could not breathe. Could not think. Then the phone lit up one final time. One last message. {final_message} The lights cut out. All at once. The phone screen came on by itself in the dark. Its light crawled across the wall and stopped at the bedroom door. Something was standing there. Perfectly still. Not breathing. {horror_detail} Then the whisper came. Right against their ear. {closing_line} {cta}",
+      "It started the night {character} moved into the old house. The previous owner had died inside. Everyone called it an accident. But on the very first night, {character} noticed something was off. {discovery}. Small things at first. Easy to explain away. But then came the thing that could not be explained. {secret_message} {character} had never told anyone that. Had never written it down. Had never said it out loud. Yet somehow it was here. In this house. Waiting. The messages kept arriving. Every night at {time}. Word for word. Memory for memory. Getting closer. Getting darker. {character} tried to leave three times. Something always pulled them back. Then one night the messages stopped. Just silence. Until {tense_action}. {character} looked toward the mirror. There was a reflection. But {character} was not facing it. Not even close. {horror_detail} Then one final message appeared on the screen. {closing_line} {cta}",
+      "Three missed calls. All from {dead_person}'s number. Who had been dead for {timeframe}. {character} sat on the edge of the bed and stared at the screen. There had to be an explanation. A logical one. But none came. {character} called back. It rang once. Then someone picked up. No voice. Just slow, steady breathing. Then {secret_message} {character} dropped the phone. Backed against the wall. Heart hammering. {discovery}. {character} crossed the room carefully. Knelt down. Opened it slowly. {discovery_detail}. Hands completely numb now. {character} called back one more time. One ring. Someone picked up again. But this time there was a voice. {final_message} The air in the room changed. Every mirror went dark. The window slammed shut by itself. Then from the hallway came the sound of footsteps. Slow. Getting closer. The door handle turned on its own. {horror_detail} And from the other side of the door came the words: {closing_line} {cta}"
+    ]
   },
-  "motivation": {
-    "keywords": ["failure", "comeback", "discipline", "success", "mindset"],
-    "pexels_queries": ["person running sunrise", "success businessman", "training gym", "mountain climber"],
+
+  "mystery": {
+    "keywords": ["disappearance", "secret", "clue", "twist", "reveal"],
+    "pexels_queries": ["detective investigation dark", "abandoned house mystery", "suspicious person shadow", "crime scene night", "locked room mystery", "dark alley suspense", "police investigation", "mysterious document"],
+    "characters": ["Detective Rao", "Journalist Priya", "Officer Mehta", "Aryan", "Neha"],
+    "victims": ["the woman from Room 12", "the professor", "the banker's wife", "the missing boy", "the old librarian"],
+    "clues": [
+      "a phone that kept ringing from a dead number",
+      "a diary with pages torn out",
+      "a photo where someone had been scratched out",
+      "a receipt dated after the murder",
+      "a key that fit no lock in the building"
+    ],
+    "red_herrings": [
+      "The husband had a solid alibi.",
+      "The security footage showed nothing unusual.",
+      "The neighbor swore she heard nothing.",
+      "The fingerprints matched someone already dead."
+    ],
+    "twists": [
+      "The victim had faked their own death. To escape someone far worse.",
+      "The killer was protecting a child no one knew existed.",
+      "The missing person had been in the building the whole time.",
+      "The case was solved twenty years ago. By the wrong person."
+    ],
+    "ctas": [
+      "Follow for a new mystery every day. The next one will keep you guessing even longer.",
+      "Share this if the twist surprised you. New cases drop every single day.",
+      "Like if you solved it before the end. Subscribe for a new mystery story every day."
+    ],
     "script_templates": [
-      "{hook} {character} had lost everything. {low_point}. But instead of giving up, {action}. {result}. Your comeback starts today. {cta}.",
-      "{hook} Everyone called {character} a failure. {low_point}. But they made one decision that changed everything. {action}. {result}. {cta}."
-    ],
-    "characters": ["a fired executive", "a broke student", "a retired athlete", "a single parent", "a failed entrepreneur"],
-    "low_points": [
-      "No money. No job. No plan.",
-      "Everyone said it was over.",
-      "They had 30 days before losing their home.",
-      "Three rejections in one week."
-    ],
-    "actions": [
-      "they woke up at 5am every single day.",
-      "they wrote one page every morning.",
-      "they called 50 people and got one yes.",
-      "they practiced for 1000 hours straight."
-    ],
-    "results": [
-      "Two years later, they built a million-dollar company.",
-      "Today they mentor thousands.",
-      "The same people who doubted them now ask for advice.",
-      "They never looked back."
-    ],
-    "ctas": ["Subscribe for daily motivation.", "Follow for stories that will change your mindset."]
-  },
-  "relationship": {
-    "keywords": ["love", "betrayal", "forgiveness", "loyalty", "trust"],
-    "pexels_queries": ["couple sunset", "romantic dinner", "breakup sadness", "reconciliation"],
-    "script_templates": [
-      "{hook} {character} thought they knew {partner}. {setup}. But then {conflict}. And in that moment, {realization}. Love is never what it seems.",
-      "{hook} {character} and {partner} seemed perfect together. {setup}. Until {conflict}. That was the day {realization}. {cta}."
-    ],
-    "characters": ["a husband", "a wife", "a best friend", "a colleague", "a childhood sweetheart"],
-    "partners": ["their partner of 10 years", "their closest friend", "the person they trusted most"],
-    "setups": [
-      "Everything seemed perfect from the outside.",
-      "They had built a life together.",
-      "Friends called them the perfect couple."
-    ],
-    "conflicts": [
-      "a message changed everything.",
-      "a stranger revealed a secret.",
-      "a photo surfaced from 5 years ago.",
-      "a late-night call exposed the truth."
-    ],
-    "realizations": [
-      "some people enter your life to teach you, not to stay.",
-      "trust, once broken, rebuilds differently.",
-      "the truth always finds its moment."
-    ],
-    "ctas": ["Subscribe for more relationship stories.", "Follow for daily stories about love and life."]
+      "{character} had worked hundreds of cases. None like this one. {victim} had vanished without a single trace. No bag. No goodbye. No body. Just gone. The only real clue was {clue}. It made no sense at first. Not until {character} sat with it long enough. {red_herring} But {character} kept pulling threads. One at a time. The timeline was wrong. The witnesses had rehearsed their answers. Someone had been back inside that apartment after the disappearance. Someone with a key. Someone who understood exactly how investigations worked. {character} went back to the very beginning. Looked at every detail twice. Then found it. The thing hiding in plain sight all along. A name. Written in the corner of a document that should not have existed. A name that matched one already in the files. A name that changed everything. {character} made one call. It went straight to voicemail. Drove over immediately. The door was unlocked. The room was empty. But on the table was a single note. Three words. I saw you. {twist} {cta}",
+      "Nobody reported {victim} missing for three days. That was the first strange thing. {character} took the case as a favor. Expected to close it fast. But then came {clue}. That single detail shifted everything. The timeline was off by two hours. The witnesses kept changing small things in their stories. And someone had accessed the victim's accounts three days after the disappearance. Three days. {red_herring} But {character} trusted instinct over convenience. Pulled one record nobody thought to check. Found a pattern inside the numbers. A trail that should not have existed. Six hours later, {character} knew the full truth. Not just who. Not just how. But why. And the why was the part nobody was ready for. {twist} The person {character} had trusted most had been right at the center of it. Standing there. Smiling the whole time. Waiting to be found. {cta}"
+    ]
   }
 }
