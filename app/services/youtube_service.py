@@ -35,15 +35,35 @@ class YouTubeService:
     def _execute_upload(self, request) -> str:
         max_retries = 5
         retries = 0
+        max_polls = 600
+        polls = 0
+        no_progress_polls = 0
+        last_progress = 0.0
         while True:
             try:
+                polls += 1
+                if polls > max_polls:
+                    raise RuntimeError("Upload timed out while waiting for YouTube resumable completion")
                 status, response = request.next_chunk()
                 if response:
                     if "id" in response:
                         return response["id"]
                     raise RuntimeError(f"Unexpected upload response: {response}")
                 if status is not None:
-                    logger.info("YouTube upload progress: %.1f%%", status.progress() * 100)
+                    progress = float(status.progress() or 0.0)
+                    logger.info("YouTube upload progress: %.1f%%", progress * 100)
+                    if progress <= last_progress:
+                        no_progress_polls += 1
+                    else:
+                        no_progress_polls = 0
+                        last_progress = progress
+                else:
+                    no_progress_polls += 1
+
+                if no_progress_polls >= 120:
+                    raise RuntimeError(
+                        "Upload stalled: no progress from YouTube resumable API for too many polls"
+                    )
             except HttpError as e:
                 error_text = ""
                 try:
