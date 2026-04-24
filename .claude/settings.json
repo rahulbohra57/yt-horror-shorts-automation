@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(pip index *)"
+      "Bash(pip index *)",
+      "Bash(python -c \"import app.core; print\\(dir\\(app.core\\)\\)\")",
+      "Bash(pytest tests/test_render_service.py -v)",
+      "Bash(python -m pytest tests/test_youtube_service.py -v)",
+      "Bash(ffmpeg -i /tmp/shorts_output/5.mp4 -ss 8 -vframes 1 /tmp/f8.jpg -y)",
+      "Bash(ffmpeg -i /tmp/shorts_output/5.mp4 -ss 12 -vframes 1 /tmp/f12.jpg -y)"
     ]
   }
 }
