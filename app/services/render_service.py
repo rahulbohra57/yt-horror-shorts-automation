@@ -9,7 +9,8 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 TARGET_W, TARGET_H = 1080, 1920
-FONT_SIZE = 44
+FONT_SIZE = 30
+CAPTION_WORDS_PER_SEGMENT = 4
 
 _BG_AUDIO_DIR = Path(__file__).parent.parent.parent / "background_audio"
 _NICHE_MUSIC_FOLDER = {
@@ -165,7 +166,7 @@ class RenderService:
             "-vf", (
                 f"subtitles={escaped_srt}:force_style="
                 f"'FontSize={FONT_SIZE},PrimaryColour=&H00FFFFFF,"
-                f"OutlineColour=&H00000000,Outline=3,Alignment=5,MarginV=60{font_arg}'"
+                f"OutlineColour=&H00000000,Outline=2,Alignment=2,MarginV=180{font_arg}'"
             ),
             "-c:v", "libx264", "-preset", "fast", "-crf", "23",
             "-c:a", "aac", "-b:a", "128k",
@@ -232,10 +233,11 @@ class RenderService:
         from PIL import Image, ImageDraw
         img = Image.new("RGBA", (TARGET_W, TARGET_H), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
-        lines = self._wrap_words(text, max_chars=30)
-        line_h = FONT_SIZE + 12
+        lines = self._wrap_words(text, max_chars=18, max_lines=2)
+        line_h = FONT_SIZE + 8
         total_h = line_h * len(lines)
-        y_start = (TARGET_H - total_h) // 2
+        y_anchor = int(TARGET_H * 0.72)
+        y_start = max(90, y_anchor - (total_h // 2))
 
         for li, ln in enumerate(lines):
             try:
@@ -249,7 +251,7 @@ class RenderService:
                 draw.text(
                     (x, y), ln, font=font,
                     fill=(255, 255, 255, 255),
-                    stroke_width=3, stroke_fill=(0, 0, 0, 255),
+                    stroke_width=2, stroke_fill=(0, 0, 0, 255),
                 )
             except TypeError:
                 for dx, dy in [(-2,-2),(2,-2),(-2,2),(2,2),(0,-2),(0,2),(-2,0),(2,0)]:
@@ -314,7 +316,7 @@ class RenderService:
         return ImageFont.load_default(size=FONT_SIZE)
 
     @staticmethod
-    def _wrap_words(text: str, max_chars: int = 30) -> list[str]:
+    def _wrap_words(text: str, max_chars: int = 18, max_lines: int = 2) -> list[str]:
         words = text.split()
         lines, line = [], []
         for w in words:
@@ -327,10 +329,10 @@ class RenderService:
             lines.append(" ".join(line))
         if not lines:
             return [text]
-        # Keep captions compact: avoid stacking too many tiny lines.
-        if len(lines) > 3:
-            joined = " ".join(lines)
-            return [joined[i:i + max_chars] for i in range(0, len(joined), max_chars)][:3]
+        if len(lines) > max_lines:
+            # Preserve readability: trim to a compact two-line chunk.
+            first_words = " ".join(words[: max_lines * 3])
+            return RenderService._wrap_words(first_words, max_chars=max_chars, max_lines=max_lines)
         return lines
 
     def _mux_audio_only(self, video_path: str, audio_path: str, tmp: str) -> str:
@@ -404,39 +406,52 @@ class RenderService:
         return srt_path
 
     def _get_caption_segments(self, script: str, audio_path: str, word_timings: list = None) -> list:
-        """Returns list of (start_sec, end_sec, text) caption groups — one per sentence."""
+        """Returns list of (start_sec, end_sec, text) caption groups — compact word chunks."""
         clean_script = script.replace('"', '').replace('"', '').replace('"', '')
-        sentences = [s.strip() for s in re.split(r'[.?!]', clean_script) if s.strip()]
-        if word_timings and sentences:
-            return self._align_sentences_to_word_timings(sentences, word_timings)
+        if word_timings:
+            chunks = self._align_words_to_caption_chunks(word_timings)
+            if chunks:
+                return chunks
+        words = clean_script.split()
+        if not words:
+            return [(0.0, self._get_duration(audio_path), clean_script)]
         duration = self._get_duration(audio_path)
-        time_per = duration / max(len(sentences), 1)
-        return [
-            (i * time_per, min((i + 1) * time_per, duration), s + ".")
-            for i, s in enumerate(sentences)
-        ]
+        words_per_sec = max(len(words) / max(duration, 0.01), 0.5)
+        segments = []
+        i = 0
+        while i < len(words):
+            chunk_words = words[i:i + CAPTION_WORDS_PER_SEGMENT]
+            start = i / words_per_sec
+            end = min((i + len(chunk_words)) / words_per_sec, duration)
+            segments.append((start, end, " ".join(chunk_words)))
+            i += CAPTION_WORDS_PER_SEGMENT
+        return segments
 
     @staticmethod
-    def _align_sentences_to_word_timings(sentences: list, word_timings: list) -> list:
-        """Map each sentence to word boundary events using TTS-cleaned word count."""
+    def _align_words_to_caption_chunks(word_timings: list) -> list:
+        """Map word boundary events into compact fixed-size caption chunks."""
         captions = []
-        word_idx = 0
-        for sentence in sentences:
-            if word_idx >= len(word_timings):
+        words = []
+        for entry in word_timings:
+            word = (entry.get("word") or "").strip()
+            if not word:
+                continue
+            words.append({
+                "word": word,
+                "offset": float(entry.get("offset", 0.0) or 0.0),
+                "duration": float(entry.get("duration", 0.0) or 0.0),
+            })
+
+        i = 0
+        while i < len(words):
+            chunk = words[i:i + CAPTION_WORDS_PER_SEGMENT]
+            if not chunk:
                 break
-            # Strip characters that _clean_for_tts removes so word counts match TTS
-            cleaned = sentence
-            cleaned = cleaned.replace('“', '').replace('”', '')
-            cleaned = cleaned.replace('‘', '').replace('’', '')
-            cleaned = cleaned.replace('—', ' ').replace('–', ' ')
-            cleaned = re.sub(r'["""]+', '', cleaned)
-            n_words = max(1, len(cleaned.split()))
-            start = word_timings[word_idx]["offset"]
-            end_idx = min(word_idx + n_words - 1, len(word_timings) - 1)
-            tail = word_timings[end_idx]
-            end = tail["offset"] + tail["duration"]
-            captions.append((start, end, sentence + "."))
-            word_idx += n_words
+            start = chunk[0]["offset"]
+            end = chunk[-1]["offset"] + chunk[-1]["duration"]
+            text = " ".join(w["word"] for w in chunk)
+            captions.append((start, end, text))
+            i += CAPTION_WORDS_PER_SEGMENT
         return captions
 
     def _get_duration(self, path: str) -> float:

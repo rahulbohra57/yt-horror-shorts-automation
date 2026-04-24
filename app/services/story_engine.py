@@ -11,6 +11,8 @@ TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 MAX_RECENT_STORIES = 40
 MIN_WORDS = 160
 MAX_WORDS = 210
+MIN_NOVELTY_SCORE = 0.70
+MAX_SIMILARITY_ALLOWED = 0.30
 
 STOPWORDS = {
     "the", "and", "that", "with", "from", "this", "they", "their", "there", "were", "have",
@@ -54,11 +56,12 @@ class StoryEngine:
         pexels_query = random.choice(data["pexels_queries"])
         recent = [s for s in (recent_scripts or []) if isinstance(s, str) and s.strip()][:MAX_RECENT_STORIES]
         recent_fingerprints = {self._script_fingerprint(s) for s in recent}
+        recent_openings = {self._opening_fingerprint(s) for s in recent}
         history_count = len(recent)
 
         # Build multiple candidates and score for novelty against recent stories.
         best_candidate = None
-        for attempt in range(36):
+        for attempt in range(120):
             hook = random.choice(self._hooks)
             template = random.choice(data["script_templates"])
             cta = self._pick(data.get("ctas", ["Subscribe for daily stories."]))
@@ -76,19 +79,33 @@ class StoryEngine:
             if fingerprint in recent_fingerprints:
                 logger.debug(f"Script attempt {attempt+1}: skipped exact-match fingerprint")
                 continue
+            opening_fp = self._opening_fingerprint(script)
+            opening_repeat = bool(opening_fp and opening_fp in recent_openings)
 
             novelty = self._novelty_score(script, recent)
+            max_similarity = self._max_similarity(script, recent)
             score = novelty + random.random() * 0.02
+            if max_similarity > MAX_SIMILARITY_ALLOWED:
+                # Soft penalty so we still keep a best candidate even if all templates are close.
+                score -= (max_similarity - MAX_SIMILARITY_ALLOWED) * 1.5
+            if opening_repeat:
+                score -= 0.20
             candidate = {
                 "hook": hook,
                 "script": script,
                 "cta": cta,
                 "score": score,
                 "novelty": novelty,
+                "similarity": max_similarity,
+                "opening_repeat": opening_repeat,
             }
             if best_candidate is None or candidate["score"] > best_candidate["score"]:
                 best_candidate = candidate
-            if novelty >= 0.58:
+            if (
+                novelty >= MIN_NOVELTY_SCORE
+                and max_similarity <= MAX_SIMILARITY_ALLOWED
+                and not opening_repeat
+            ):
                 break
 
         # Fallback if all attempts were filtered out by length or duplicate checks.
@@ -167,6 +184,8 @@ class StoryEngine:
                 replacements[placeholder] = self._pick(data[key])
 
         result = template
+        if "{hook}" not in template:
+            result = f"{hook} {result}"
         for k, v in replacements.items():
             result = result.replace("{" + k + "}", v)
 
@@ -202,13 +221,20 @@ class StoryEngine:
     def _script_fingerprint(self, script: str) -> str:
         return re.sub(r"[^a-z0-9]+", " ", script.lower()).strip()
 
+    def _opening_fingerprint(self, script: str) -> str:
+        parts = [s.strip() for s in re.split(r"[.?!]", script) if s.strip()]
+        if not parts:
+            return ""
+        opening = " ".join(parts[0].lower().split()[:12])
+        return re.sub(r"[^a-z0-9]+", " ", opening).strip()
+
     def _tokenize(self, script: str) -> set[str]:
         words = re.findall(r"[a-zA-Z']+", script.lower())
         return {w for w in words if len(w) > 3 and w not in STOPWORDS}
 
-    def _novelty_score(self, script: str, recent_scripts: list[str]) -> float:
+    def _max_similarity(self, script: str, recent_scripts: list[str]) -> float:
         if not recent_scripts:
-            return 1.0
+            return 0.0
         tokens = self._tokenize(script)
         if not tokens:
             return 0.0
@@ -223,6 +249,12 @@ class StoryEngine:
             similarity = len(tokens & other) / len(union)
             if similarity > max_similarity:
                 max_similarity = similarity
+        return max_similarity
+
+    def _novelty_score(self, script: str, recent_scripts: list[str]) -> float:
+        if not recent_scripts:
+            return 1.0
+        max_similarity = self._max_similarity(script, recent_scripts)
         return 1.0 - max_similarity
 
     def _generate_title(self, hook: str) -> str:
