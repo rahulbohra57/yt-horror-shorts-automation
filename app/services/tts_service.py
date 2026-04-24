@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import re
 from pathlib import Path
 from gtts import gTTS
@@ -11,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_VOICE = "en-US-GuyNeural"
 DEFAULT_RATE = "+50%"
+EDGE_TTS_MAX_RETRIES = 3
 
 
 class TTSService:
@@ -34,15 +36,28 @@ class TTSService:
                 return str(output_path), json.load(f)
 
         word_timings: list = []
-        try:
-            word_timings = await self._edge_tts(clean, voice, rate, output_path)
-            with open(timing_path, "w") as f:
-                json.dump(word_timings, f)
-            logger.info(f"edge-tts generated: {output_path} ({len(word_timings)} words)")
-        except Exception as e:
-            logger.warning(f"edge-tts failed ({e}), falling back to gTTS")
-            output_path.unlink(missing_ok=True)
-            timing_path.unlink(missing_ok=True)
+        edge_error = None
+        for attempt in range(1, EDGE_TTS_MAX_RETRIES + 1):
+            try:
+                word_timings = await self._edge_tts(clean, voice, rate, output_path)
+                with open(timing_path, "w") as f:
+                    json.dump(word_timings, f)
+                logger.info(f"edge-tts generated: {output_path} ({len(word_timings)} words)")
+                edge_error = None
+                break
+            except Exception as e:
+                edge_error = e
+                output_path.unlink(missing_ok=True)
+                timing_path.unlink(missing_ok=True)
+                if attempt < EDGE_TTS_MAX_RETRIES:
+                    logger.warning(f"edge-tts attempt {attempt}/{EDGE_TTS_MAX_RETRIES} failed ({e}), retrying")
+                    await asyncio.sleep(attempt)
+
+        if edge_error is not None:
+            allow_fallback = os.getenv("ALLOW_GTTS_FALLBACK", "false").lower() in {"1", "true", "yes"}
+            if not allow_fallback:
+                raise RuntimeError(f"edge-tts failed after retries: {edge_error}") from edge_error
+            logger.warning(f"edge-tts failed ({edge_error}), falling back to gTTS")
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, self._gtts_fallback, clean, output_path)
 

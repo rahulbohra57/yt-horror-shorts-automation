@@ -82,6 +82,7 @@ jobs:
           MEDIA_CACHE_DIR: /tmp/pexels_cache
           OUTPUT_DIR: /tmp/shorts_output
           SCHEDULER_ENABLED: "false"
+          ALLOW_GTTS_FALLBACK: "false"
         run: |
           set -euo pipefail
           if [ -z "${PEXELS_API_KEY}" ] || [ -z "${YOUTUBE_CLIENT_ID}" ] || [ -z "${YOUTUBE_CLIENT_SECRET}" ] || [ -z "${YOUTUBE_REFRESH_TOKEN}" ]; then

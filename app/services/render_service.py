@@ -9,7 +9,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 TARGET_W, TARGET_H = 1080, 1920
-FONT_SIZE = 62
+FONT_SIZE = 44
 
 _BG_AUDIO_DIR = Path(__file__).parent.parent.parent / "background_audio"
 _NICHE_MUSIC_FOLDER = {
@@ -165,7 +165,7 @@ class RenderService:
             "-vf", (
                 f"subtitles={escaped_srt}:force_style="
                 f"'FontSize={FONT_SIZE},PrimaryColour=&H00FFFFFF,"
-                f"OutlineColour=&H00000000,Outline=3,Alignment=5,MarginV=0{font_arg}'"
+                f"OutlineColour=&H00000000,Outline=3,Alignment=5,MarginV=60{font_arg}'"
             ),
             "-c:v", "libx264", "-preset", "fast", "-crf", "23",
             "-c:a", "aac", "-b:a", "128k",
@@ -232,8 +232,8 @@ class RenderService:
         from PIL import Image, ImageDraw
         img = Image.new("RGBA", (TARGET_W, TARGET_H), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
-        lines = self._wrap_words(text, max_chars=22)
-        line_h = FONT_SIZE + 16
+        lines = self._wrap_words(text, max_chars=30)
+        line_h = FONT_SIZE + 12
         total_h = line_h * len(lines)
         y_start = (TARGET_H - total_h) // 2
 
@@ -314,7 +314,7 @@ class RenderService:
         return ImageFont.load_default(size=FONT_SIZE)
 
     @staticmethod
-    def _wrap_words(text: str, max_chars: int = 22) -> list[str]:
+    def _wrap_words(text: str, max_chars: int = 30) -> list[str]:
         words = text.split()
         lines, line = [], []
         for w in words:
@@ -325,7 +325,13 @@ class RenderService:
                 line.append(w)
         if line:
             lines.append(" ".join(line))
-        return lines or [text]
+        if not lines:
+            return [text]
+        # Keep captions compact: avoid stacking too many tiny lines.
+        if len(lines) > 3:
+            joined = " ".join(lines)
+            return [joined[i:i + max_chars] for i in range(0, len(joined), max_chars)][:3]
+        return lines
 
     def _mux_audio_only(self, video_path: str, audio_path: str, tmp: str) -> str:
         """Simple mux: video + audio, no captions."""
