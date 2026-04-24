@@ -15,19 +15,26 @@ jobs:
       - name: Trigger scheduled run endpoint
         env:
           APP_URL: ${{ secrets.APP_URL }}
-          INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
         run: |
           set -euo pipefail
-          if [ -z "${APP_URL}" ] || [ -z "${INTERNAL_API_KEY}" ]; then
-            echo "APP_URL or INTERNAL_API_KEY secret is missing"
+          if [ -z "${APP_URL}" ]; then
+            echo "APP_URL secret is missing"
             exit 1
           fi
 
+          # Alternate niche across the four daily schedules.
+          niche="horror"
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            case "${{ github.event.schedule }}" in
+              "10 6 * * *"|"10 18 * * *") niche="mystery" ;;
+              *) niche="horror" ;;
+            esac
+          fi
+
           HTTP_CODE=$(curl -sS -o /tmp/resp.txt -w "%{http_code}" \
-            -X POST "${APP_URL}/api/scheduled-run" \
+            -X POST "${APP_URL}/api/generate" \
             -H "Content-Type: application/json" \
-            -H "x-internal-api-key: ${INTERNAL_API_KEY}" \
-            --data '{"upload": true}')
+            --data "{\"niche\":\"${niche}\",\"upload\":true}")
 
           cat /tmp/resp.txt
           if [ "${HTTP_CODE}" -lt 200 ] || [ "${HTTP_CODE}" -ge 300 ]; then
