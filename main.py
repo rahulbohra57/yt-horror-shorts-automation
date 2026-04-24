@@ -21,9 +21,11 @@ async def lifespan(app: FastAPI):
     # Import all models before init_db so create_all picks them up
     from app.core import models  # noqa: F401
     init_db(settings.DB_PATH)
-    scheduler.start()
+    if settings.SCHEDULER_ENABLED:
+        scheduler.start()
     yield
-    scheduler.stop()
+    if settings.SCHEDULER_ENABLED:
+        scheduler.stop()
 
 
 app = FastAPI(title="YT Shorts Bot", lifespan=lifespan)

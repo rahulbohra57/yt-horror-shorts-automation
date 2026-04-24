@@ -23,7 +23,8 @@ def test_list_niches(client):
     assert resp.status_code == 200
     data = resp.json()
     assert "niches" in data
-    assert "moral" in data["niches"]
+    assert "horror" in data["niches"]
+    assert "mystery" in data["niches"]
 
 
 def test_list_shorts_empty_or_list(client):
@@ -33,7 +34,7 @@ def test_list_shorts_empty_or_list(client):
 
 
 def test_generate_endpoint_creates_job(client):
-    resp = client.post("/api/generate", json={"niche": "moral", "upload": False})
+    resp = client.post("/api/generate", json={"niche": "horror", "upload": False})
     assert resp.status_code == 200
     data = resp.json()
     assert "job_id" in data

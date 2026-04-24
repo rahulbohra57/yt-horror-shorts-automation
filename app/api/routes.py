@@ -1,8 +1,10 @@
 import logging
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+import secrets
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.api.deps import get_db
+from app.core.config import settings
 from app.core.models import JobStatus, Short
 
 router = APIRouter()
@@ -13,6 +15,10 @@ VALID_NICHES = ["horror", "mystery"]
 
 class GenerateRequest(BaseModel):
     niche: str
+    upload: bool = True
+
+
+class ScheduledGenerateRequest(BaseModel):
     upload: bool = True
 
 
@@ -74,6 +80,27 @@ async def generate(req: GenerateRequest, background_tasks: BackgroundTasks, db: 
     return {"job_id": short.id, "status": "queued", "niche": req.niche}
 
 
+@router.post("/api/scheduled-run")
+async def scheduled_run(
+    req: ScheduledGenerateRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    x_internal_api_key: str | None = Header(default=None),
+):
+    if not settings.INTERNAL_API_KEY:
+        raise HTTPException(status_code=503, detail="Scheduler API key not configured")
+    if not x_internal_api_key or not secrets.compare_digest(x_internal_api_key, settings.INTERNAL_API_KEY):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    niche = _pick_scheduled_niche(db)
+    short = Short(niche=niche, status=JobStatus.PENDING)
+    db.add(short)
+    db.commit()
+    db.refresh(short)
+    background_tasks.add_task(_run_pipeline, niche, str(short.id), req.upload)
+    return {"job_id": short.id, "status": "queued", "niche": niche, "source": "scheduler"}
+
+
 async def _run_pipeline(niche: str, job_id: str, upload: bool):
     from app.core.config import settings
     from app.core.database import get_engine, get_session_factory
@@ -87,3 +114,16 @@ async def _run_pipeline(niche: str, job_id: str, upload: bool):
         await pipeline.run(niche=niche, job_id=job_id, session=session, upload=upload)
     finally:
         session.close()
+
+
+def _pick_scheduled_niche(db: Session) -> str:
+    scheduled_niches = ["horror", "mystery"]
+    last = (
+        db.query(Short)
+        .filter(Short.niche.in_(scheduled_niches))
+        .order_by(Short.created_at.desc(), Short.id.desc())
+        .first()
+    )
+    if not last:
+        return scheduled_niches[0]
+    return scheduled_niches[1] if last.niche == scheduled_niches[0] else scheduled_niches[0]

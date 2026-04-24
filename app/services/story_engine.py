@@ -3,10 +3,34 @@ import logging
 import random
 import re
 from pathlib import Path
+from typing import Iterable
 
 logger = logging.getLogger(__name__)
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
+MAX_RECENT_STORIES = 40
+MIN_WORDS = 160
+MAX_WORDS = 210
+
+STOPWORDS = {
+    "the", "and", "that", "with", "from", "this", "they", "their", "there", "were", "have",
+    "been", "into", "your", "about", "after", "before", "because", "while", "when", "what",
+    "where", "which", "could", "would", "should", "just", "then", "them", "over", "under",
+    "inside", "outside", "someone", "every", "never", "still", "very", "only", "more", "less",
+}
+
+HORROR_ESCALATIONS = [
+    "Then the smell of wet earth crept in, like a grave had just been opened nearby.",
+    "A thin trail of muddy footprints appeared across the floor, each one filling with dark water.",
+    "The walls began to pulse softly, as if something alive was breathing behind them.",
+    "From the ceiling, a drop of cold liquid landed on their hand, thick and unmistakably red.",
+]
+
+MYSTERY_ESCALATIONS = [
+    "One detail refused to fit, and that was the detail that broke the whole case open.",
+    "The evidence did not just point to a suspect, it pointed to someone inside the investigation.",
+    "That final clue proved this was never one crime, but a cover for something much older and darker.",
+]
 
 
 class StoryEngine:
@@ -22,36 +46,77 @@ class StoryEngine:
         except FileNotFoundError as e:
             raise RuntimeError(f"Failed to load niches.json from {TEMPLATES_DIR}: {e}") from e
 
-    def generate(self, niche: str) -> dict:
+    def generate(self, niche: str, recent_scripts: Iterable[str] | None = None) -> dict:
         if niche not in self._niches:
             raise ValueError(f"Unknown niche: '{niche}'. Available: {list(self._niches.keys())}")
 
         data = self._niches[niche]
-        hook = random.choice(self._hooks)
         pexels_query = random.choice(data["pexels_queries"])
+        recent = [s for s in (recent_scripts or []) if isinstance(s, str) and s.strip()][:MAX_RECENT_STORIES]
+        recent_fingerprints = {self._script_fingerprint(s) for s in recent}
+        history_count = len(recent)
 
-        # Retry up to 3 times to land in the 160–210 word range (≈52–58s at +50% TTS)
-        script = ""
-        cta = ""
-        for attempt in range(3):
+        # Build multiple candidates and score for novelty against recent stories.
+        best_candidate = None
+        for attempt in range(36):
+            hook = random.choice(self._hooks)
             template = random.choice(data["script_templates"])
             cta = self._pick(data.get("ctas", ["Subscribe for daily stories."]))
             script = self._fill_template(template, hook, data, cta)
-            word_count = len(script.split())
-            if 160 <= word_count <= 210:
-                break
-            logger.debug(f"Script attempt {attempt+1}: {word_count} words, retrying")
+            escalation = self._pick_escalation(niche, history_count)
+            if escalation:
+                script = self._inject_before_cta(script, cta, escalation)
 
-        title = self._generate_title(hook)
-        logger.info(f"Generated script for niche={niche}, words={len(script.split())}")
+            word_count = len(script.split())
+            if not (MIN_WORDS <= word_count <= MAX_WORDS):
+                logger.debug(f"Script attempt {attempt+1}: {word_count} words, retrying")
+                continue
+
+            fingerprint = self._script_fingerprint(script)
+            if fingerprint in recent_fingerprints:
+                logger.debug(f"Script attempt {attempt+1}: skipped exact-match fingerprint")
+                continue
+
+            novelty = self._novelty_score(script, recent)
+            score = novelty + random.random() * 0.02
+            candidate = {
+                "hook": hook,
+                "script": script,
+                "cta": cta,
+                "score": score,
+                "novelty": novelty,
+            }
+            if best_candidate is None or candidate["score"] > best_candidate["score"]:
+                best_candidate = candidate
+            if novelty >= 0.58:
+                break
+
+        # Fallback if all attempts were filtered out by length or duplicate checks.
+        if best_candidate is None:
+            hook = random.choice(self._hooks)
+            template = random.choice(data["script_templates"])
+            cta = self._pick(data.get("ctas", ["Subscribe for daily stories."]))
+            script = self._fill_template(template, hook, data, cta)
+            escalation = self._pick_escalation(niche, history_count)
+            if escalation:
+                script = self._inject_before_cta(script, cta, escalation)
+            best_candidate = {"hook": hook, "script": script, "cta": cta, "novelty": 0.0}
+
+        title = self._generate_title(best_candidate["hook"])
+        logger.info(
+            "Generated script for niche=%s, words=%s, novelty=%.2f",
+            niche,
+            len(best_candidate["script"].split()),
+            best_candidate["novelty"],
+        )
         return {
             "niche": niche,
-            "hook": hook,
-            "script": script,
+            "hook": best_candidate["hook"],
+            "script": best_candidate["script"],
             "title": title,
             "pexels_query": pexels_query,
             "pexels_queries": data["pexels_queries"],
-            "cta": cta,
+            "cta": best_candidate["cta"],
             "seo": self._generate_seo(title, niche),
         }
 
@@ -116,6 +181,49 @@ class StoryEngine:
 
     def _pick(self, lst: list) -> str:
         return random.choice(lst) if lst else ""
+
+    def _pick_escalation(self, niche: str, history_count: int) -> str:
+        if niche == "horror":
+            tier = min(history_count // 4, len(HORROR_ESCALATIONS) - 1)
+            return HORROR_ESCALATIONS[tier]
+        if niche == "mystery":
+            tier = min(history_count // 5, len(MYSTERY_ESCALATIONS) - 1)
+            return MYSTERY_ESCALATIONS[tier]
+        return ""
+
+    def _inject_before_cta(self, script: str, cta: str, extra_line: str) -> str:
+        idx = script.rfind(cta)
+        if idx == -1:
+            return self._clean_script(f"{script} {extra_line}")
+        prefix = script[:idx].rstrip()
+        suffix = script[idx:].lstrip()
+        return self._clean_script(f"{prefix} {extra_line} {suffix}")
+
+    def _script_fingerprint(self, script: str) -> str:
+        return re.sub(r"[^a-z0-9]+", " ", script.lower()).strip()
+
+    def _tokenize(self, script: str) -> set[str]:
+        words = re.findall(r"[a-zA-Z']+", script.lower())
+        return {w for w in words if len(w) > 3 and w not in STOPWORDS}
+
+    def _novelty_score(self, script: str, recent_scripts: list[str]) -> float:
+        if not recent_scripts:
+            return 1.0
+        tokens = self._tokenize(script)
+        if not tokens:
+            return 0.0
+        max_similarity = 0.0
+        for old in recent_scripts:
+            other = self._tokenize(old)
+            if not other:
+                continue
+            union = tokens | other
+            if not union:
+                continue
+            similarity = len(tokens & other) / len(union)
+            if similarity > max_similarity:
+                max_similarity = similarity
+        return 1.0 - max_similarity
 
     def _generate_title(self, hook: str) -> str:
         # Preserve ellipsis for cliffhanger effect; apply Title Case (YouTube standard)

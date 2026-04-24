@@ -12,6 +12,8 @@ services:
         sync: false
       - key: YOUTUBE_REFRESH_TOKEN
         sync: false
+      - key: INTERNAL_API_KEY
+        sync: false
       - key: CHANNEL_NAME
         sync: false
       - key: DB_PATH
@@ -20,7 +22,5 @@ services:
         value: /tmp/pexels_cache
       - key: OUTPUT_DIR
         value: /tmp/shorts_output
-      - key: SCHEDULE_HOUR
-        value: "9"
-      - key: SCHEDULE_MINUTE
-        value: "0"
+      - key: SCHEDULER_ENABLED
+        value: "false"

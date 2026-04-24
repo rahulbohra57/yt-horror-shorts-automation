@@ -37,7 +37,28 @@ class Pipeline:
         try:
             logger.info(f"[{job_id}] Generating story for niche={niche}")
             update_status(JobStatus.GENERATING)
-            story = self.story.generate(niche)
+            recent_scripts = []
+            try:
+                rows = (
+                    session.query(Short.script)
+                    .filter(Short.niche == niche, Short.script.isnot(None), Short.id != int(job_id))
+                    .order_by(Short.created_at.desc())
+                    .limit(40)
+                    .all()
+                )
+                for row in rows:
+                    if isinstance(row, str):
+                        recent_scripts.append(row)
+                    elif isinstance(row, (tuple, list)) and row:
+                        recent_scripts.append(row[0])
+                    else:
+                        value = getattr(row, "script", None)
+                        if value:
+                            recent_scripts.append(value)
+            except Exception as history_err:
+                logger.warning(f"[{job_id}] Failed to load recent scripts: {history_err}")
+
+            story = self.story.generate(niche, recent_scripts=recent_scripts)
 
             logger.info(f"[{job_id}] Generating TTS")
             audio_path, word_timings = await self.tts.generate(story["script"])
@@ -70,7 +91,15 @@ class Pipeline:
                 update_status(JobStatus.UPLOADING)
                 youtube_url = self.youtube.upload(video_path, story["seo"])
 
-            update_status(JobStatus.DONE, video_path=video_path, youtube_url=youtube_url, title=story["title"])
+            update_status(
+                JobStatus.DONE,
+                video_path=video_path,
+                youtube_url=youtube_url,
+                title=story["title"],
+                script=story["script"],
+                hook=story["hook"],
+                pexels_query=story["pexels_query"],
+            )
             logger.info(f"[{job_id}] Pipeline complete. URL={youtube_url}")
             return {"status": "done", "youtube_url": youtube_url, "title": story["title"]}
 
