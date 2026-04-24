@@ -50,18 +50,23 @@ class TTSService:
 
     async def _edge_tts(self, text: str, voice: str, rate: str, output_path: Path) -> list:
         """Generate audio + word timings via edge-tts streaming."""
-        communicate = edge_tts.Communicate(text, voice, rate=rate, boundary="WordBoundary")
+        # edge-tts API varies by version; newer/older builds may not support `boundary` kwarg.
+        try:
+            communicate = edge_tts.Communicate(text, voice, rate=rate, boundary="WordBoundary")
+        except TypeError:
+            communicate = edge_tts.Communicate(text, voice, rate=rate)
         audio_chunks: list[bytes] = []
         word_timings: list = []
 
         async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                audio_chunks.append(chunk["data"])
-            elif chunk["type"] == "WordBoundary":
+            chunk_type = str(chunk.get("type", "")).lower()
+            if chunk_type == "audio":
+                audio_chunks.append(chunk.get("data", b""))
+            elif "wordboundary" in chunk_type or chunk_type == "word_boundary":
                 word_timings.append({
-                    "word": chunk["text"],
-                    "offset": chunk["offset"] / 1e7,    # ticks → seconds
-                    "duration": chunk["duration"] / 1e7,
+                    "word": chunk.get("text") or chunk.get("word") or "",
+                    "offset": (chunk.get("offset", 0) or 0) / 1e7,    # ticks → seconds
+                    "duration": (chunk.get("duration", 0) or 0) / 1e7,
                 })
 
         if not audio_chunks:
