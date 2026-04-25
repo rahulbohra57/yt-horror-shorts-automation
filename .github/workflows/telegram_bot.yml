@@ -10,7 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      actions: write   # needed to dispatch scheduled_uploads.yml
+      actions: write    # needed to dispatch scheduled_uploads.yml
+      contents: read    # needed for actions/checkout
     steps:
       - uses: actions/checkout@v4
 
