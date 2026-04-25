@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 VALID_GENRES = {"horror", "mystery"}
 OFFSET_FILE = Path(ROOT / ".data" / "tg_cmd_offset.txt")
 GET_UPDATES = "https://api.telegram.org/bot{token}/getUpdates?offset={offset}&timeout=5"
+DELETE_WEBHOOK = "https://api.telegram.org/bot{token}/deleteWebhook"
 
 
 def _load_offset() -> int:
@@ -37,6 +38,15 @@ def _load_offset() -> int:
 def _save_offset(offset: int) -> None:
     OFFSET_FILE.parent.mkdir(parents=True, exist_ok=True)
     OFFSET_FILE.write_text(str(offset))
+
+
+async def _ensure_no_webhook(token: str) -> None:
+    """Delete any active webhook so getUpdates works."""
+    async with httpx.AsyncClient(timeout=10) as client:
+        info = await client.get(f"https://api.telegram.org/bot{token}/getWebhookInfo")
+        if info.json().get("result", {}).get("url"):
+            await client.get(DELETE_WEBHOOK.format(token=token))
+            logger.info("Deleted stale webhook")
 
 
 async def _dispatch_pipeline(genre: str, github_token: str, repo: str) -> bool:
@@ -68,6 +78,8 @@ async def main() -> None:
         logger.error("GITHUB_TOKEN or GITHUB_REPOSITORY not set")
         return
 
+    await _ensure_no_webhook(settings.TELEGRAM_BOT_TOKEN)
+
     telegram = TelegramService(settings.TELEGRAM_BOT_TOKEN, settings.TELEGRAM_CHAT_ID)
     offset = _load_offset()
 
@@ -82,6 +94,7 @@ async def main() -> None:
 
     logger.info(f"Processing {len(updates)} updates")
     last_update_id = offset - 1
+    dispatched_genres: set[str] = set()
 
     for update in updates:
         update_id = update.get("update_id", 0)
@@ -90,30 +103,38 @@ async def main() -> None:
         message = update.get("message", {})
         raw_text = (message.get("text") or "").strip()
         chat_id = message.get("chat", {}).get("id")
-        text = raw_text.upper()
+        parts = raw_text.upper().split()
 
-        if not chat_id or not text.startswith("CREATE"):
+        if not chat_id or not parts or parts[0] != "CREATE":
             continue
 
-        parts = text.split()
         if len(parts) < 2 or parts[1].lower() not in VALID_GENRES:
             await telegram.reply(
                 chat_id,
-                f"❓ Unknown genre. Use:\n<code>CREATE HORROR</code>\n<code>CREATE MYSTERY</code>",
+                "❓ Unknown genre. Use:\n<code>CREATE HORROR</code>\n<code>CREATE MYSTERY</code>",
             )
             continue
 
         genre = parts[1].lower()
-        logger.info(f"CREATE {genre.upper()} requested by chat_id={chat_id}")
 
-        await telegram.reply(
-            chat_id,
-            f"🎬 <b>Creating {genre.upper()} short...</b>\n\nPipeline triggered. You'll get a notification when the video is uploaded.",
-        )
+        # Deduplicate: only dispatch once per genre per poll cycle
+        if genre in dispatched_genres:
+            logger.info(f"Skipping duplicate CREATE {genre.upper()} in this batch")
+            continue
+
+        logger.info(f"CREATE {genre.upper()} requested by chat_id={chat_id}")
+        dispatched_genres.add(genre)
 
         success = await _dispatch_pipeline(genre, github_token, repo)
-        if not success:
-            await telegram.reply(chat_id, f"❌ Failed to trigger pipeline. Check GitHub Actions.")
+        if success:
+            await telegram.reply(
+                chat_id,
+                f"🎬 <b>Creating {genre.upper()} short...</b>\n\n"
+                f"Pipeline started on GitHub Actions.\n"
+                f"You'll get notified when rendering begins and again when the video goes live.",
+            )
+        else:
+            await telegram.reply(chat_id, "❌ Failed to trigger pipeline. Check GitHub Actions logs.")
 
     _save_offset(last_update_id + 1)
     logger.info(f"Offset advanced to {last_update_id + 1}")
