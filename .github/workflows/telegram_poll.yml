@@ -1,0 +1,46 @@
+name: Telegram Bot Poll
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # every 30 minutes
+  workflow_dispatch:
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Restore Offset Cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .data/tg_offset.txt
+          key: tg-offset-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            tg-offset-${{ github.ref_name }}-
+
+      - name: Install Dependencies
+        run: pip install httpx pydantic-settings python-dotenv
+
+      - name: Poll Telegram and handle commands
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          YOUTUBE_CHANNEL_HANDLE: ${{ secrets.YOUTUBE_CHANNEL_HANDLE }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        run: python scripts/telegram_poll.py
+
+      - name: Save Offset Cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .data/tg_offset.txt
+          key: tg-offset-${{ github.ref_name }}-${{ github.run_id }}

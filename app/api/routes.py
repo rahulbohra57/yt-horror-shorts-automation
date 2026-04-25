@@ -136,7 +136,10 @@ async def telegram_webhook(request: Request):
         refresh_token=settings.YOUTUBE_REFRESH_TOKEN,
     )
     try:
-        stats = youtube.get_channel_stats()
+        stats = youtube.get_channel_stats(
+            api_key=settings.YOUTUBE_API_KEY,
+            channel_handle=settings.YOUTUBE_CHANNEL_HANDLE,
+        )
         msg = (
             f"📊 <b>Channel Stats</b>\n\n"
             f"👥 Subscribers: <b>{stats['subscribers']:,}</b>\n"

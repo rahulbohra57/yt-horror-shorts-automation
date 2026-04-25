@@ -9,7 +9,6 @@ from time import sleep
 logger = logging.getLogger(__name__)
 
 YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload"
-YOUTUBE_READONLY_SCOPE = "https://www.googleapis.com/auth/youtube.readonly"
 CATEGORY_ENTERTAINMENT = "22"
 
 
@@ -114,12 +113,20 @@ class YouTubeService:
             }
         }
 
-    def get_channel_stats(self) -> dict:
-        service = self._get_service(scopes=[YOUTUBE_READONLY_SCOPE])
-        response = service.channels().list(part="statistics,snippet", mine=True).execute()
-        items = response.get("items", [])
+    def get_channel_stats(self, api_key: str, channel_handle: str) -> dict:
+        """Fetch public channel stats using a YouTube Data API key (no OAuth needed)."""
+        import httpx
+        handle = channel_handle.lstrip("@")
+        url = (
+            f"https://www.googleapis.com/youtube/v3/channels"
+            f"?part=statistics,snippet&forHandle={handle}&key={api_key}"
+        )
+        resp = httpx.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        items = data.get("items", [])
         if not items:
-            raise RuntimeError("No channel data returned from YouTube API")
+            raise RuntimeError(f"No channel found for handle @{handle}")
         stats = items[0]["statistics"]
         snippet = items[0]["snippet"]
         return {

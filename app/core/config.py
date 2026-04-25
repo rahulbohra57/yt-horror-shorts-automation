@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_CHAT_ID: str = ""
     APP_URL: str = ""
+    YOUTUBE_API_KEY: str = ""
+    YOUTUBE_CHANNEL_HANDLE: str = ""
 
 
 settings = Settings()
