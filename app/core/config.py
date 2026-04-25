@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     SCHEDULE_UPLOAD: bool = True
     SCHEDULE_NICHES: str = "horror,mystery"
     SCHEDULE_MISFIRE_GRACE_SECONDS: int = Field(default=3600, ge=60, le=86400)
+    TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_CHAT_ID: str = ""
 
 
 settings = Settings()

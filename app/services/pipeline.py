@@ -8,6 +8,7 @@ from app.services.pexels_service import PexelsService
 from app.services.tts_service import TTSService
 from app.services.render_service import RenderService
 from app.services.youtube_service import YouTubeService
+from app.services.telegram_service import TelegramService
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,10 @@ class Pipeline:
             client_secret=settings.YOUTUBE_CLIENT_SECRET,
             refresh_token=settings.YOUTUBE_REFRESH_TOKEN,
         )
+        self.telegram = TelegramService(
+            bot_token=settings.TELEGRAM_BOT_TOKEN,
+            chat_id=settings.TELEGRAM_CHAT_ID,
+        )
 
     async def run(self, niche: str, job_id: str, session, upload: bool = True) -> dict:
         short = session.query(Short).filter_by(id=int(job_id)).first()
@@ -37,6 +42,7 @@ class Pipeline:
         try:
             logger.info(f"[{job_id}] Generating story for niche={niche}")
             update_status(JobStatus.GENERATING)
+            await self.telegram.notify_started(niche, job_id)
             recent_scripts = []
             try:
                 rows = (
@@ -90,6 +96,8 @@ class Pipeline:
                 logger.info(f"[{job_id}] Uploading to YouTube")
                 update_status(JobStatus.UPLOADING)
                 youtube_url = self.youtube.upload(video_path, story["seo"])
+                if youtube_url:
+                    await self.telegram.notify_uploaded(story["title"], youtube_url, niche)
 
             update_status(
                 JobStatus.DONE,
@@ -106,4 +114,5 @@ class Pipeline:
         except Exception as e:
             logger.error(f"[{job_id}] Pipeline failed: {e}", exc_info=True)
             update_status(JobStatus.FAILED, error_message=str(e)[:1000])
+            await self.telegram.notify_failed(job_id, niche, str(e))
             return {"status": "failed", "error": str(e)}
