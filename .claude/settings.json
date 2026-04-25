@@ -6,7 +6,11 @@
       "Bash(pytest tests/test_render_service.py -v)",
       "Bash(python -m pytest tests/test_youtube_service.py -v)",
       "Bash(ffmpeg -i /tmp/shorts_output/5.mp4 -ss 8 -vframes 1 /tmp/f8.jpg -y)",
-      "Bash(ffmpeg -i /tmp/shorts_output/5.mp4 -ss 12 -vframes 1 /tmp/f12.jpg -y)"
+      "Bash(ffmpeg -i /tmp/shorts_output/5.mp4 -ss 12 -vframes 1 /tmp/f12.jpg -y)",
+      "Bash(gh auth *)",
+      "Bash(GITHUB_TOKEN=$\\(gh auth token\\) GITHUB_REPOSITORY=\"rahulbohra57/yt-horror-shorts-automation\" python3 scripts/telegram_commands.py)",
+      "Bash(curl -s \"https://api.telegram.org/botTELEGRAM_TOKEN_REDACTED/getWebhookInfo\")",
+      "Bash(curl -s \"https://api.telegram.org/botTELEGRAM_TOKEN_REDACTED/deleteWebhook\")"
     ]
   }
 }
