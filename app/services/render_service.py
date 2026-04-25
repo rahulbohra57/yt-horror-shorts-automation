@@ -9,7 +9,11 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 TARGET_W, TARGET_H = 1080, 1920
-FONT_SIZE = 30
+# ASS/SRT FontSize units: rendered_px = FontSize * video_height / PlayResY (384)
+# SRT_FONT_SIZE=15 → 15*1920/384 = 75px actual height per line
+SRT_FONT_SIZE = 15
+# Pillow renders in actual pixels on the 1080×1920 canvas
+PIL_FONT_SIZE = 75
 CAPTION_WORDS_PER_SEGMENT = 4
 
 _BG_AUDIO_DIR = Path(__file__).parent.parent.parent / "background_audio"
@@ -165,7 +169,7 @@ class RenderService:
             "ffmpeg", "-i", video_path, "-i", audio_path,
             "-vf", (
                 f"subtitles={escaped_srt}:force_style="
-                f"'FontSize={FONT_SIZE},PrimaryColour=&H00FFFFFF,"
+                f"'FontSize={SRT_FONT_SIZE},PrimaryColour=&H00FFFFFF,"
                 f"OutlineColour=&H00000000,Outline=2,Alignment=2,MarginV=180{font_arg}'"
             ),
             "-c:v", "libx264", "-preset", "fast", "-crf", "23",
@@ -234,7 +238,7 @@ class RenderService:
         img = Image.new("RGBA", (TARGET_W, TARGET_H), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
         lines = self._wrap_words(text, max_chars=18, max_lines=2)
-        line_h = FONT_SIZE + 8
+        line_h = PIL_FONT_SIZE + 8
         total_h = line_h * len(lines)
         y_anchor = int(TARGET_H * 0.72)
         y_start = max(90, y_anchor - (total_h // 2))
@@ -244,7 +248,7 @@ class RenderService:
                 bbox = draw.textbbox((0, 0), ln, font=font)
                 text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
             except Exception:
-                text_w, text_h = len(ln) * (FONT_SIZE // 2), FONT_SIZE
+                text_w, text_h = len(ln) * (PIL_FONT_SIZE // 2), PIL_FONT_SIZE
             x = (TARGET_W - text_w) // 2
             y = y_start + li * line_h
             try:
@@ -310,10 +314,10 @@ class RenderService:
         if _SYSTEM_FONT:
             font_path, font_idx = _SYSTEM_FONT
             try:
-                return ImageFont.truetype(font_path, FONT_SIZE, index=font_idx)
+                return ImageFont.truetype(font_path, PIL_FONT_SIZE, index=font_idx)
             except Exception:
                 pass
-        return ImageFont.load_default(size=FONT_SIZE)
+        return ImageFont.load_default(size=PIL_FONT_SIZE)
 
     @staticmethod
     def _wrap_words(text: str, max_chars: int = 18, max_lines: int = 2) -> list[str]:
@@ -409,7 +413,7 @@ class RenderService:
         """Returns list of (start_sec, end_sec, text) caption groups — compact word chunks."""
         clean_script = script.replace('"', '').replace('"', '').replace('"', '')
         if word_timings:
-            chunks = self._align_words_to_caption_chunks(word_timings)
+            chunks = self._align_words_to_caption_chunks(word_timings, clean_script)
             if chunks:
                 return chunks
         words = clean_script.split()
@@ -428,23 +432,45 @@ class RenderService:
         return segments
 
     @staticmethod
-    def _align_words_to_caption_chunks(word_timings: list) -> list:
-        """Map word boundary events into compact fixed-size caption chunks."""
-        captions = []
-        words = []
+    def _align_words_to_caption_chunks(word_timings: list, script: str = "") -> list:
+        """Map word boundary events into caption chunks, restoring punctuation from script."""
+        timed = []
         for entry in word_timings:
             word = (entry.get("word") or "").strip()
             if not word:
                 continue
-            words.append({
+            timed.append({
                 "word": word,
                 "offset": float(entry.get("offset", 0.0) or 0.0),
                 "duration": float(entry.get("duration", 0.0) or 0.0),
             })
 
+        # edge-tts strips trailing punctuation from word tokens; restore from script
+        if script and timed:
+            script_words = script.split()
+
+            def bare(w: str) -> str:
+                return re.sub(r"[^\w]", "", w.lower())
+
+            matched = []
+            si = 0
+            for tw in timed:
+                tw_bare = bare(tw["word"])
+                found = False
+                for j in range(si, min(si + 8, len(script_words))):
+                    if bare(script_words[j]) == tw_bare:
+                        matched.append({**tw, "word": script_words[j]})
+                        si = j + 1
+                        found = True
+                        break
+                if not found:
+                    matched.append(tw)
+            timed = matched
+
+        captions = []
         i = 0
-        while i < len(words):
-            chunk = words[i:i + CAPTION_WORDS_PER_SEGMENT]
+        while i < len(timed):
+            chunk = timed[i:i + CAPTION_WORDS_PER_SEGMENT]
             if not chunk:
                 break
             start = chunk[0]["offset"]

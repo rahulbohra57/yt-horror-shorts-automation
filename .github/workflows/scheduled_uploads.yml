@@ -61,11 +61,6 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             niche="${{ github.event.inputs.niche }}"
             upload="${{ github.event.inputs.upload }}"
-          elif [ "${{ github.event_name }}" = "schedule" ]; then
-            case "${{ github.event.schedule }}" in
-              "10 6 * * *"|"10 18 * * *") niche="mystery" ;;
-              *) niche="horror" ;;
-            esac
           fi
 
           echo "niche=${niche}" >> "$GITHUB_OUTPUT"
@@ -82,7 +77,8 @@ jobs:
           MEDIA_CACHE_DIR: /tmp/pexels_cache
           OUTPUT_DIR: /tmp/shorts_output
           SCHEDULER_ENABLED: "false"
-          ALLOW_GTTS_FALLBACK: "false"
+          ALLOW_GTTS_FALLBACK: "true"
+          SCHEDULE_UPLOAD: "true"
         run: |
           set -euo pipefail
           if [ -z "${PEXELS_API_KEY}" ] || [ -z "${YOUTUBE_CLIENT_ID}" ] || [ -z "${YOUTUBE_CLIENT_SECRET}" ] || [ -z "${YOUTUBE_REFRESH_TOKEN}" ]; then

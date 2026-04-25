@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from typing import Iterable
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
@@ -276,7 +278,7 @@ class StoryEngine:
             f"{title}\n\n"
             f"A powerful {niche} story that will stay with you.\n"
             f"Watch till the end — the twist will surprise you.\n\n"
-            f"Subscribe for daily stories → @{niche}shorts\n\n"
+            f"Subscribe for daily stories → @{settings.CHANNEL_NAME}\n\n"
             + " ".join(tags)
         )
         return {"title": title, "description": description, "tags": tags}
