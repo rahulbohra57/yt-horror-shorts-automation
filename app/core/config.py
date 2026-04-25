@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     APP_URL: str = ""
     YOUTUBE_API_KEY: str = ""
     YOUTUBE_CHANNEL_HANDLE: str = ""
+    GEMINI_API_KEY: str = ""
 
 
 settings = Settings()

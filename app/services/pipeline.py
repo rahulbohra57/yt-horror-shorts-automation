@@ -4,6 +4,7 @@ import random
 from app.core.config import settings
 from app.core.models import JobStatus, Short
 from app.services.story_engine import StoryEngine
+from app.services.gemini_story_engine import GeminiStoryEngine
 from app.services.pexels_service import PexelsService
 from app.services.tts_service import TTSService
 from app.services.render_service import RenderService
@@ -15,7 +16,13 @@ logger = logging.getLogger(__name__)
 
 class Pipeline:
     def __init__(self):
-        self.story = StoryEngine()
+        template_engine = StoryEngine()
+        if settings.GEMINI_API_KEY:
+            logger.info("Gemini API key found — using GeminiStoryEngine with template fallback")
+            self.story = GeminiStoryEngine(fallback_engine=template_engine)
+        else:
+            logger.warning("No GEMINI_API_KEY set — falling back to template-based StoryEngine")
+            self.story = template_engine
         self.pexels = PexelsService(api_key=settings.PEXELS_API_KEY, cache_dir=settings.MEDIA_CACHE_DIR)
         self.tts = TTSService(output_dir=settings.OUTPUT_DIR + "/tts")
         self.renderer = RenderService(output_dir=settings.OUTPUT_DIR)
