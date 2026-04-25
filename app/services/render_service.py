@@ -20,6 +20,12 @@ _BG_AUDIO_DIR = Path(__file__).parent.parent.parent / "background_audio"
 _NICHE_MUSIC_FOLDER = {
     "horror": "Horror",
     "mystery": "Mystery",
+    "paranormal": "Horror",
+    "twist_endings": "Mystery",
+    "psychological": "Horror",
+    "supernatural": "Horror",
+    "slasher": "Horror",
+    "folk_horror": "Horror",
 }
 
 # (font_path, index) — prefer bold variants
@@ -327,17 +333,13 @@ class RenderService:
             if line and len(" ".join(line + [w])) > max_chars:
                 lines.append(" ".join(line))
                 line = [w]
+                if len(lines) >= max_lines:
+                    break
             else:
                 line.append(w)
-        if line:
+        if line and len(lines) < max_lines:
             lines.append(" ".join(line))
-        if not lines:
-            return [text]
-        if len(lines) > max_lines:
-            # Preserve readability: trim to a compact two-line chunk.
-            first_words = " ".join(words[: max_lines * 3])
-            return RenderService._wrap_words(first_words, max_chars=max_chars, max_lines=max_lines)
-        return lines
+        return lines if lines else [text[:max_chars]]
 
     def _mux_audio_only(self, video_path: str, audio_path: str, tmp: str) -> str:
         """Simple mux: video + audio, no captions."""

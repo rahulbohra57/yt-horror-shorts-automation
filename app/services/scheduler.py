@@ -10,7 +10,16 @@ from app.services.pipeline import Pipeline
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_NICHES = ["horror", "mystery"]
+DEFAULT_NICHES = [
+    "horror",
+    "mystery",
+    "paranormal",
+    "twist_endings",
+    "psychological",
+    "supernatural",
+    "slasher",
+    "folk_horror",
+]
 
 
 class DailyScheduler:
@@ -38,8 +47,9 @@ class DailyScheduler:
         return sorted(set(times))
 
     def _niches(self) -> list[str]:
+        valid = set(DEFAULT_NICHES)
         raw = [x.strip().lower() for x in (settings.SCHEDULE_NICHES or "").split(",") if x.strip()]
-        niches = [x for x in raw if x in {"horror", "mystery"}]
+        niches = [x for x in raw if x in valid]
         return niches or DEFAULT_NICHES
 
     def start(self):

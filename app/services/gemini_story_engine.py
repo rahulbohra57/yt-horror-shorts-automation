@@ -17,7 +17,7 @@ NICHE_PROMPTS = {
     "horror": {
         "genre": "horror",
         "tone": "terrifying, suspenseful, and deeply unsettling",
-        "elements": "ghosts, unexplained phenomena, dark secrets, paranormal events, psychological dread",
+        "elements": "ghosts, unexplained messages from the dead, dark secrets, paranormal dread",
         "ending": "a chilling twist or revelation that leaves the viewer disturbed",
     },
     "mystery": {
@@ -26,55 +26,135 @@ NICHE_PROMPTS = {
         "elements": "hidden clues, red herrings, unexpected betrayals, shocking revelations",
         "ending": "a plot twist that reframes everything the viewer just heard",
     },
+    "paranormal": {
+        "genre": "paranormal horror",
+        "tone": "eerie, atmospheric, and deeply unsettling with a sense of genuine dread",
+        "elements": "ghost sightings, EVP recordings, unexplained phenomena, haunted locations, apparitions",
+        "ending": "an encounter with a paranormal entity or evidence that something non-human is present",
+    },
+    "twist_endings": {
+        "genre": "psychological thriller with a devastating twist ending",
+        "tone": "calm and methodical that slowly builds to a reality-shattering revelation",
+        "elements": "hidden truths, fabricated realities, identity deception, unreliable narration",
+        "ending": "a single twist reveal in the last 2-3 sentences that completely reframes the entire story",
+    },
+    "psychological": {
+        "genre": "psychological horror",
+        "tone": "creeping, claustrophobic, and deeply disturbing — the horror is in the mind",
+        "elements": "gaslighting, memory manipulation, reality distortion, isolation, self-doubt",
+        "ending": "the protagonist realizing the true nature of what has been done to their mind",
+    },
+    "supernatural": {
+        "genre": "supernatural horror",
+        "tone": "ancient, oppressive, and cosmically frightening — something beyond human comprehension",
+        "elements": "demonic entities, curses, dark rituals, possessed objects, forces beyond science",
+        "ending": "the protagonist confronting or being claimed by the supernatural force",
+    },
+    "slasher": {
+        "genre": "survival slasher horror",
+        "tone": "pulse-pounding, claustrophobic, and viscerally tense",
+        "elements": "a stalker or hunter, an isolated location, survival decisions, cat-and-mouse tension",
+        "ending": "a shocking survival moment or terrifying realization about the hunter",
+    },
+    "folk_horror": {
+        "genre": "folk horror",
+        "tone": "deeply unsettling, culturally rooted, and quietly terrifying — the community IS the threat",
+        "elements": "isolated village communities, ancient rituals, old traditions with dark purposes, outsiders as sacrificial targets",
+        "ending": "the protagonist realizing the true nature of the community's traditions — and their role in them",
+    },
 }
 
-SEO_TEMPLATES = {
+GENRE_LABELS = {
+    "horror": "Horror",
+    "mystery": "Mystery",
+    "paranormal": "Paranormal",
+    "twist_endings": "Twist",
+    "psychological": "Psychological Horror",
+    "supernatural": "Supernatural",
+    "slasher": "Slasher",
+    "folk_horror": "Folk Horror",
+}
+
+SEO_CONFIGS = {
     "horror": {
-        "description_fmt": (
-            "{title}\n\n"
-            "😱 One minute. One story. One nightmare.\n\n"
-            "Watch till the end… the twist is waiting for you. 👀\n"
-            "If this scared you, hit subscribe for daily horror shorts → @{channel}\n\n"
-            "🩸 New scary stories every week\n"
-            "👻 Ghosts • Mysteries • Dark Tales • Paranormal\n\n"
-            "#shorts #horror #scary #creepy #ghoststory #thriller "
-            "#haunted #paranormal #horrorshorts\n\n"
-            "horror shorts, scary shorts, horror stories, ghost stories, creepy videos, "
-            "short horror films, scary youtube shorts, haunted stories, paranormal shorts, "
-            "dark stories, horror reels, creepy tales, horror channel, scary endings, "
-            "1 minute horror, jumpscare shorts, horror india, scary stories hindi, "
-            "horror twist story, spooky shorts"
-        ),
-        "tags": [
-            "shorts", "horror", "scary", "creepy", "ghoststory", "thriller",
-            "haunted", "paranormal", "horrorshorts", "horror shorts", "scary shorts",
-            "horror stories", "ghost stories", "creepy videos", "haunted stories",
-            "paranormal shorts", "dark stories", "horror reels", "1 minute horror",
-            "jumpscare shorts", "horror twist story", "spooky shorts",
-        ],
+        "icon": "😱",
+        "tagline": "One minute. One story. One nightmare.",
+        "sub_tagline": "Watch till the end… the twist is waiting for you. 👀",
+        "cta": "If this scared you, hit subscribe for daily horror shorts",
+        "extras": "🩸 New scary stories every week\n👻 Ghosts • Mysteries • Dark Tales • Paranormal",
+        "hashtags": "#shorts #horror #scary #creepy #ghoststory #thriller #haunted #paranormal #horrorshorts",
+        "seo_keywords": "horror shorts, scary shorts, horror stories, ghost stories, creepy videos, short horror films, scary youtube shorts, haunted stories, paranormal shorts, dark stories, horror reels, 1 minute horror, horror twist story, spooky shorts",
+        "tags": ["shorts", "horror", "scary", "creepy", "ghoststory", "thriller", "haunted", "paranormal", "horrorshorts", "horror shorts", "scary shorts", "horror stories", "ghost stories", "1 minute horror", "horror twist story"],
     },
     "mystery": {
-        "description_fmt": (
-            "{title}\n\n"
-            "🔍 One minute. One mystery. Zero answers.\n\n"
-            "Watch till the end… the truth will shock you. 😱\n"
-            "Subscribe for daily mystery shorts → @{channel}\n\n"
-            "🎯 New mysteries every week\n"
-            "🕵️ Thrillers • Twists • Dark Secrets • Unsolved Cases\n\n"
-            "#shorts #mystery #thriller #suspense #crimestory "
-            "#detective #mysterystory #crimethriller #mysteryshorts\n\n"
-            "mystery shorts, thriller shorts, mystery stories, crime stories, dark secrets, "
-            "short mystery films, mystery youtube shorts, unsolved mysteries, detective stories, "
-            "plot twist shorts, mystery channel, shocking endings, 1 minute mystery, "
-            "crime thriller shorts, mystery india, crime stories hindi, mystery twist story"
-        ),
-        "tags": [
-            "shorts", "mystery", "thriller", "suspense", "crimestory", "detective",
-            "mysterystory", "crimethriller", "mysteryshorts", "mystery shorts",
-            "thriller shorts", "mystery stories", "crime stories", "dark secrets",
-            "plot twist shorts", "detective stories", "1 minute mystery",
-            "mystery twist story", "crime thriller shorts",
-        ],
+        "icon": "🔍",
+        "tagline": "One minute. One mystery. Zero answers.",
+        "sub_tagline": "Watch till the end… the truth will shock you. 😱",
+        "cta": "Subscribe for daily mystery shorts",
+        "extras": "🎯 New mysteries every week\n🕵️ Thrillers • Twists • Dark Secrets • Unsolved Cases",
+        "hashtags": "#shorts #mystery #thriller #suspense #crimestory #detective #mysterystory #crimethriller #mysteryshorts",
+        "seo_keywords": "mystery shorts, thriller shorts, mystery stories, crime stories, dark secrets, short mystery films, mystery youtube shorts, unsolved mysteries, detective stories, plot twist shorts, 1 minute mystery, mystery twist story",
+        "tags": ["shorts", "mystery", "thriller", "suspense", "crimestory", "detective", "mysterystory", "crimethriller", "mysteryshorts", "mystery shorts", "thriller shorts", "plot twist shorts", "1 minute mystery"],
+    },
+    "paranormal": {
+        "icon": "👻",
+        "tagline": "One minute. One encounter. One proof.",
+        "sub_tagline": "Watch till the end… you will not sleep after this. 😰",
+        "cta": "Subscribe for daily paranormal encounters",
+        "extras": "🔮 Real paranormal stories every week\n👁 Ghosts • Apparitions • EVP • Haunted Places",
+        "hashtags": "#shorts #paranormal #ghost #haunted #supernatural #spiritworld #ghoststory #paranormalactivity #horrorshorts",
+        "seo_keywords": "paranormal shorts, ghost shorts, haunted stories, paranormal activity, spirit encounters, ghost sighting shorts, haunted house shorts, EVP recordings, paranormal horror, 1 minute paranormal, ghost story shorts",
+        "tags": ["shorts", "paranormal", "ghost", "haunted", "supernatural", "spiritworld", "ghoststory", "paranormalactivity", "horrorshorts", "paranormal shorts", "ghost shorts", "haunted stories", "spirit encounters", "1 minute paranormal"],
+    },
+    "twist_endings": {
+        "icon": "🌀",
+        "tagline": "One minute. One story. One ending that changes everything.",
+        "sub_tagline": "Watch till the very last second. The twist will break your brain. 🤯",
+        "cta": "Subscribe for daily twist endings",
+        "extras": "💥 New plot twists every week\n🎭 Stories • Reveals • Mind-Bending Endings",
+        "hashtags": "#shorts #plottwist #twist #mindblown #shockingending #twistending #thriller #story #twiststory",
+        "seo_keywords": "twist ending shorts, plot twist shorts, shocking ending stories, mind-bending shorts, twist story shorts, story with twist, youtube shorts twist, 1 minute twist story, plot twist horror, narrative twist shorts",
+        "tags": ["shorts", "plottwist", "twist", "mindblown", "shockingending", "twistending", "thriller", "story", "twiststory", "twist ending shorts", "plot twist shorts", "shocking ending stories", "1 minute twist"],
+    },
+    "psychological": {
+        "icon": "🧠",
+        "tagline": "One minute. One mind. Zero certainty.",
+        "sub_tagline": "Watch till the end… and then question everything you just heard. 😶",
+        "cta": "Subscribe for daily psychological horror",
+        "extras": "🔪 New mind horror every week\n🪞 Gaslighting • Memory • Reality • Control",
+        "hashtags": "#shorts #psychologicalhorror #mindbending #gaslighting #thriller #horror #dark #psychologicalthriller #mentalhorror",
+        "seo_keywords": "psychological horror shorts, mind horror shorts, gaslighting horror, psychological thriller shorts, mind bending horror, reality horror, mental manipulation story, psychological horror 1 minute, mind horror youtube shorts",
+        "tags": ["shorts", "psychologicalhorror", "mindbending", "gaslighting", "thriller", "horror", "psychologicalthriller", "mentalhorror", "psychological horror shorts", "mind horror shorts", "reality horror", "1 minute psychological horror"],
+    },
+    "supernatural": {
+        "icon": "🔱",
+        "tagline": "One minute. One force. Beyond all understanding.",
+        "sub_tagline": "Watch till the end… some things cannot be undone. 😨",
+        "cta": "Subscribe for daily supernatural horror",
+        "extras": "⚡ New supernatural stories every week\n👁 Demons • Curses • Rituals • Dark Forces",
+        "hashtags": "#shorts #supernatural #demon #curse #horror #occult #darkmagic #supernaturalhorror #horrorshorts",
+        "seo_keywords": "supernatural horror shorts, demon horror shorts, cursed object horror, occult horror shorts, dark ritual horror, supernatural youtube shorts, 1 minute supernatural horror, demonic horror story, curse horror shorts",
+        "tags": ["shorts", "supernatural", "demon", "curse", "horror", "occult", "darkmagic", "supernaturalhorror", "horrorshorts", "supernatural horror shorts", "demon horror shorts", "cursed object horror", "1 minute supernatural"],
+    },
+    "slasher": {
+        "icon": "🔪",
+        "tagline": "One minute. One survivor. Zero guarantees.",
+        "sub_tagline": "Watch till the end… if you dare. 😰",
+        "cta": "Subscribe for daily survival horror",
+        "extras": "🏃 New slasher stories every week\n🚪 Stalkers • Isolation • Survival • Dark Endings",
+        "hashtags": "#shorts #slasher #horror #survivalhorror #stalker #scarystory #horrorshorts #thriller #horrorfan",
+        "seo_keywords": "slasher horror shorts, survival horror shorts, stalker horror story, isolated horror story, slasher youtube shorts, 1 minute slasher, survival horror 1 minute, horror chase story, dark thriller shorts",
+        "tags": ["shorts", "slasher", "horror", "survivalhorror", "stalker", "scarystory", "horrorshorts", "thriller", "slasher horror shorts", "survival horror shorts", "stalker horror story", "1 minute slasher"],
+    },
+    "folk_horror": {
+        "icon": "🌾",
+        "tagline": "One minute. One village. One ancient secret.",
+        "sub_tagline": "Watch till the end… some traditions never die. 😱",
+        "cta": "Subscribe for daily folk horror",
+        "extras": "🕯 New folk horror every week\n🌑 Villages • Rituals • Ancient Dread • Dark Traditions",
+        "hashtags": "#shorts #folkhorror #horror #ritual #darkfolklore #villagehorror #ancientevil #horrorshorts #scarystory",
+        "seo_keywords": "folk horror shorts, village horror story, ritual horror shorts, dark folklore horror, ancient horror story, community horror shorts, folk horror youtube shorts, 1 minute folk horror, rural horror story, harvest horror",
+        "tags": ["shorts", "folkhorror", "horror", "ritual", "darkfolklore", "villagehorror", "ancientevil", "horrorshorts", "folk horror shorts", "village horror story", "ritual horror shorts", "1 minute folk horror"],
     },
 }
 
@@ -87,7 +167,7 @@ class GeminiStoryEngine:
         self._niches = self._load_niches()
         self._hooks = self._load_hooks()
         genai.configure(api_key=settings.GEMINI_API_KEY)
-        self._model = genai.GenerativeModel("gemini-1.5-flash")
+        self._model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
     def _load_niches(self) -> dict:
         try:
@@ -106,18 +186,12 @@ class GeminiStoryEngine:
     def generate(self, niche: str, recent_scripts: Iterable[str] | None = None) -> dict:
         recent = list(recent_scripts or [])
         niche_data = self._niches.get(niche, {})
-        pexels_queries = niche_data.get("pexels_queries", ["dark horror scene"])
+        pexels_queries = niche_data.get("pexels_queries", ["dark horror scene", "night horror", "scary dark"])
         pexels_query = random.choice(pexels_queries)
 
-        try:
-            hook, script = self._call_gemini(niche, recent)
-        except Exception as e:
-            logger.warning(f"[GeminiStoryEngine] Gemini call failed: {e}. Using fallback.")
-            if self._fallback:
-                return self._fallback.generate(niche, recent_scripts=recent)
-            raise
+        hook, script = self._generate_with_fallback(niche, recent)
 
-        title = self._generate_title(hook)
+        title = self._generate_title(niche, hook)
         return {
             "niche": niche,
             "hook": hook,
@@ -129,74 +203,109 @@ class GeminiStoryEngine:
             "seo": self._generate_seo(title, niche),
         }
 
+    def _generate_with_fallback(self, niche: str, recent: list[str]) -> tuple[str, str]:
+        """Try Gemini; on any failure use template engine; on template failure raise."""
+        try:
+            return self._call_gemini(niche, recent)
+        except Exception as e:
+            logger.warning(
+                "[GeminiStoryEngine] Gemini failed (%s: %s). Falling back to template engine.",
+                type(e).__name__, str(e)[:200],
+            )
+        if self._fallback:
+            story = self._fallback.generate(niche, recent_scripts=recent)
+            return story["hook"], story["script"]
+        raise RuntimeError(f"Gemini failed and no template fallback configured for niche='{niche}'")
+
     def _call_gemini(self, niche: str, recent_scripts: list[str]) -> tuple[str, str]:
         config = NICHE_PROMPTS.get(niche, NICHE_PROMPTS["horror"])
-        hook_examples = "\n".join(f"- {h}" for h in self._hooks[:5])
 
-        # Build a summary of recent story openings so Gemini avoids them
+        hook_examples = "\n".join(f"- {h}" for h in self._hooks[:6])
+
+        # Summarize recent story openings so Gemini actively avoids them
         recent_openings = []
-        for s in recent_scripts[:10]:
+        for s in recent_scripts[:15]:
             first_sentence = re.split(r"[.?!]", s)[0].strip()
             if first_sentence:
-                recent_openings.append(f"- {first_sentence[:80]}")
+                recent_openings.append(f"- {first_sentence[:100]}")
         avoid_block = ""
         if recent_openings:
             avoid_block = (
-                "\n\nIMPORTANT - Do NOT reuse or closely resemble these recent story openings:\n"
+                "\n\nCRITICAL: Do NOT reuse or closely resemble ANY of these recent story openings:\n"
                 + "\n".join(recent_openings)
             )
 
         prompt = f"""You are a viral YouTube Shorts scriptwriter specializing in {config['genre']} stories.
 
-Write a BRAND NEW, completely original {config['genre']} story script for a YouTube Short.
+Write a BRAND NEW, completely original {config['genre']} story script for a YouTube Short. Every story must be unique — different character, different situation, different events.
 
 Requirements:
-- Total length: 160–210 words (strict — count carefully)
+- Total length: 170–210 words (count carefully — must be in this range)
 - Tone: {config['tone']}
 - Must include: {config['elements']}
-- Opening hook: A gripping single sentence that instantly hooks viewers (first 2 seconds)
-- Story pacing: One sentence every 1–2 seconds, pattern interrupt every 5 seconds
+- Opening hook: A single gripping sentence that hooks viewers in the first 2 seconds
+- Pacing: One punchy sentence every 1-2 seconds, pattern interrupt every 5 seconds
 - Ending: {config['ending']}
-- Last sentence must be a CTA like: "Subscribe for more stories like this." or "Follow for your daily horror fix."
-- Use Indian names (Riya, Arjun, Meera, Kabir, Priya, Dev, etc.)
-- Do NOT use: ellipsis (…), em dashes (—), or any special formatting
+- Last 1-2 sentences: A subscribe/follow CTA (e.g. "Subscribe for more." / "Follow for daily horror.")
+- Use Indian names for characters (Riya, Arjun, Meera, Kabir, Priya, Dev, Ishaan, Ananya, Siddharth, Leela, Vikram, Nisha, etc.)
+- DO NOT use: ellipsis (...), em dashes (—), asterisks, or markdown formatting in the script
+- Write in plain prose — no bullet points, no headers, no special characters
 
-Hook examples (pick a style, create your own unique hook — do NOT copy these):
+Hook style examples (create your OWN unique hook — do NOT copy these):
 {hook_examples}
 {avoid_block}
 
-Respond with ONLY valid JSON in this exact format:
-{{
-  "hook": "<opening hook sentence only>",
-  "script": "<complete script including hook, story, and CTA — 160-210 words>"
-}}"""
+Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw JSON object:
+{{"hook": "<opening hook sentence only, no punctuation issues>", "script": "<complete 170-210 word script including hook at the start, full story, and CTA at the end>"}}"""
 
-        response = self._model.generate_content(prompt)
+        response = self._model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                temperature=1.0,
+                top_p=0.95,
+                max_output_tokens=1024,
+            ),
+        )
         text = response.text.strip()
 
-        # Strip markdown code fences if present
-        text = re.sub(r"^```(?:json)?\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
+        # Strip markdown code fences if Gemini wraps in them
+        text = re.sub(r"^```(?:json)?\s*\n?", "", text, flags=re.MULTILINE)
+        text = re.sub(r"\n?```\s*$", "", text, flags=re.MULTILINE)
+        text = text.strip()
 
         parsed = json.loads(text)
         hook = parsed["hook"].strip()
         script = parsed["script"].strip()
 
         word_count = len(script.split())
-        logger.info(f"[GeminiStoryEngine] Generated {word_count} word script for niche={niche}")
+        logger.info(
+            "[GeminiStoryEngine] Generated niche=%s words=%d hook='%s...'",
+            niche, word_count, hook[:50],
+        )
 
         return hook, script
 
-    def _generate_title(self, hook: str) -> str:
-        base = hook.rstrip(".")
-        return f"{base.title()} #Shorts"
+    def _generate_title(self, niche: str, hook: str) -> str:
+        label = GENRE_LABELS.get(niche, "Horror")
+        base = hook.rstrip(".").rstrip("?").rstrip("!")
+        # Title-case without breaking apostrophes (Python's str.title() capitalises after "'")
+        titled = re.sub(r"[A-Za-z]+('[A-Za-z]+)?", lambda m: m.group(0).capitalize(), base)
+        return f"{titled} #{label} #Shorts"
 
     def _generate_seo(self, title: str, niche: str) -> dict:
         ch = settings.CHANNEL_NAME
-        template = SEO_TEMPLATES.get(niche, SEO_TEMPLATES["horror"])
-        description = template["description_fmt"].format(title=title, channel=ch)
+        cfg = SEO_CONFIGS.get(niche, SEO_CONFIGS["horror"])
+        description = (
+            f"{title}\n\n"
+            f"{cfg['icon']} {cfg['tagline']}\n\n"
+            f"{cfg['sub_tagline']}\n"
+            f"{cfg['cta']} → @{ch}\n\n"
+            f"{cfg['extras']}\n\n"
+            f"{cfg['hashtags']}\n\n"
+            f"{cfg['seo_keywords']}"
+        )
         return {
             "title": title,
             "description": description,
-            "tags": template["tags"],
+            "tags": cfg["tags"],
         }

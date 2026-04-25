@@ -10,7 +10,16 @@ from app.core.models import JobStatus, Short
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-VALID_NICHES = ["horror", "mystery"]
+VALID_NICHES = [
+    "horror",
+    "mystery",
+    "paranormal",
+    "twist_endings",
+    "psychological",
+    "supernatural",
+    "slasher",
+    "folk_horror",
+]
 
 
 class GenerateRequest(BaseModel):
@@ -155,13 +164,13 @@ async def telegram_webhook(request: Request):
 
 
 def _pick_scheduled_niche(db: Session) -> str:
-    scheduled_niches = ["horror", "mystery"]
     last = (
         db.query(Short)
-        .filter(Short.niche.in_(scheduled_niches))
+        .filter(Short.niche.in_(VALID_NICHES))
         .order_by(Short.created_at.desc(), Short.id.desc())
         .first()
     )
-    if not last:
-        return scheduled_niches[0]
-    return scheduled_niches[1] if last.niche == scheduled_niches[0] else scheduled_niches[0]
+    if not last or last.niche not in VALID_NICHES:
+        return VALID_NICHES[0]
+    idx = VALID_NICHES.index(last.niche)
+    return VALID_NICHES[(idx + 1) % len(VALID_NICHES)]

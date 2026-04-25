@@ -93,5 +93,228 @@
       "{character} had worked hundreds of cases. None like this one. {victim} had vanished without a single trace. No bag. No goodbye. No body. Just gone. The only real clue was {clue}. It made no sense at first. Not until {character} sat with it long enough. {red_herring} But {character} kept pulling threads. One at a time. The timeline was wrong. The witnesses had rehearsed their answers. Someone had been back inside that apartment after the disappearance. Someone with a key. Someone who understood exactly how investigations worked. {character} went back to the very beginning. Looked at every detail twice. Then found it. The thing hiding in plain sight all along. A name. Written in the corner of a document that should not have existed. A name that matched one already in the files. A name that changed everything. {character} made one call. It went straight to voicemail. Drove over immediately. The door was unlocked. The room was empty. But on the table was a single note. Three words. I saw you. {twist} {cta}",
       "Nobody reported {victim} missing for three days. That was the first strange thing. {character} took the case as a favor. Expected to close it fast. But then came {clue}. That single detail shifted everything. The timeline was off by two hours. The witnesses kept changing small things in their stories. And someone had accessed the victim's accounts three days after the disappearance. Three days. {red_herring} But {character} trusted instinct over convenience. Pulled one record nobody thought to check. Found a pattern inside the numbers. A trail that should not have existed. Six hours later, {character} knew the full truth. Not just who. Not just how. But why. And the why was the part nobody was ready for. {twist} The person {character} had trusted most had been right at the center of it. Standing there. Smiling the whole time. Waiting to be found. {cta}"
     ]
+  },
+
+  "paranormal": {
+    "keywords": ["ghost", "spirit", "omen", "apparition", "EVP", "presence"],
+    "pexels_queries": ["ghost light hallway", "spirit orb dark room", "abandoned building night", "fog cemetery dark", "candle flicker shadow", "haunted corridor empty", "dark staircase shadow", "old house night fog"],
+    "characters": ["Riya", "Arjun", "Meera", "Kabir", "Priya", "Dev", "Ishaan", "Ananya"],
+    "locations": ["the old bungalow at the edge of town", "the shuttered wing of the hospital", "the house that had been empty for eleven years", "the building where three people vanished in one year"],
+    "omens": [
+      "every clock in the house stopped at the same time",
+      "the temperature dropped fifteen degrees without any reason",
+      "every photograph in the room turned face-down on its own",
+      "the dog refused to enter the room for seven days straight"
+    ],
+    "evp_lines": [
+      "\"You are not alone in this room.\"",
+      "\"Leave before the third night.\"",
+      "\"She never left this house.\"",
+      "\"It already knows your name.\""
+    ],
+    "apparition_details": [
+      "A woman in a white saree standing at the end of the hall. No face. Just standing.",
+      "A child sitting in the corner. Rocking. Whispering numbers backward.",
+      "A shape behind the glass. Moving slowly. With no one on the other side.",
+      "A figure in the mirror that did not copy the reflection."
+    ],
+    "ctas": [
+      "Follow for paranormal stories that will make you sleep with the lights on. Every night.",
+      "Subscribe for a new paranormal encounter every single day. You have been warned.",
+      "Share this with someone who believes. New paranormal stories drop every night."
+    ],
+    "script_templates": [
+      "{character} moved into {location} on a Tuesday. By Wednesday, {omen}. {character} told themselves it was the old wiring. Old buildings do strange things. But on the third night, the EVP recorder they had left running captured something. A voice. Clear as anything. {evp_lines} {character} played it back four times. It was not static. Not wind. It was a voice. Speaking directly into the microphone. Like it knew the device was there. Like it had been waiting for someone to listen. {character} walked through every room with a flashlight. Checked every door. Every window. The house was locked from the inside. Nobody could have entered. Nobody human, anyway. Then at the far end of the corridor, in the dark, {apparition_details} {character} did not move. Could not move. It turned its head. Slowly. Like it had all the time in the world. And then it spoke. Out loud. Without a mouth. {evp_lines} {cta}",
+      "The paranormal investigator who rented {location} said it would be a routine case. It was never routine. On the first night, {omen}. On the second, the motion sensors triggered in an empty room. By the third night, {character} had stopped trying to explain things. The audio files were the worst part. Hours of silence. Then a voice. Soft at first. Then louder. {evp_lines} {character} cross-referenced the recordings with local death records. Three names matched the voice patterns. All three had died inside this building. All three within the same year. {character} began packing equipment at dawn. But just before the door, {apparition_details} It did not speak. It simply pointed. At the chair. Where {character} had been sitting all night. Something was already sitting in it. {cta}"
+    ]
+  },
+
+  "twist_endings": {
+    "keywords": ["reveal", "truth", "deception", "betrayal", "realization"],
+    "pexels_queries": ["shocked face dark", "mystery reveal dramatic", "person alone thinking dark", "dramatic shadow face", "mirror reflection dramatic", "dark room single light", "revelation moment dramatic", "empty corridor dramatic light"],
+    "characters": ["Riya", "Arjun", "Meera", "Kabir", "Priya", "Dev", "Vikram", "Nisha"],
+    "setups": [
+      "had been living a perfectly ordinary life for six years",
+      "thought they knew exactly who they were and where they came from",
+      "had been protecting someone they loved without ever questioning why",
+      "had been telling the same story for so long they believed it themselves"
+    ],
+    "false_realities": [
+      "The letters were never sent. Every single one had been intercepted.",
+      "The accident never happened. It was staged. And they had helped stage it.",
+      "The person they had been mourning for three years had been alive the whole time.",
+      "The job, the apartment, the life, all of it had been constructed for them. By someone else."
+    ],
+    "reveal_moments": [
+      "when they found the second phone hidden inside the wall",
+      "when the DNA results came back and matched no one in the family",
+      "when they replayed the voicemail and heard their own voice giving instructions they had no memory of",
+      "when the photograph dated three years before their birth showed them standing in it"
+    ],
+    "twists": [
+      "They had not been the victim. They had been the architect. Of everything.",
+      "The person they had been hunting had been dead for a decade. What they had been chasing was a memory. Their own.",
+      "There was no one else in the house. There never had been. The voice was theirs.",
+      "The story they had told the police was not a lie. It was the truth. But it was someone else's truth. Planted inside their mind."
+    ],
+    "ctas": [
+      "Follow for a new twist story every day. You will never see the ending coming.",
+      "Subscribe for daily plot twists that will completely change how you see the story.",
+      "Share this if the ending broke your brain. New twist stories every single day."
+    ],
+    "script_templates": [
+      "{character} {setup}. Until the day everything unraveled. It started small. A detail that did not fit. {false_realities} {character} went back through everything. Every conversation. Every memory. Something was wrong with all of it. The pieces fit too perfectly. Like a story written by someone who wanted them to believe it. The realization hit {reveal_moment}. {character} sat very still for a long time. Because if that was a lie, then so was everything else. The relationship. The past. The grief. The guilt. All of it constructed. All of it a role they had been playing without knowing they were performing. Then the phone rang. A voice they had not heard in years. Calm. Patient. Like they had been expecting this call for a long time. And the voice said three words that changed everything. {twists} {cta}",
+      "Everyone told {character} the same story. They had heard it so many times they stopped questioning it. But then came the day {reveal_moment}. And suddenly not a single piece of their life made sense anymore. {false_realities} {character} traced it back. Year by year. Conversation by conversation. Every confirmation had come from the same source. Every piece of evidence pointed back to the same person. The person they had trusted most. The one who had been there from the very beginning. Helping them remember. Helping them grieve. Helping them stay exactly where they needed to be. {character} drove to that address for the first time. Knocked on the door. And when it opened, they finally understood. {twists} {cta}"
+    ]
+  },
+
+  "psychological": {
+    "keywords": ["mind", "perception", "reality", "delusion", "gaslighting", "breakdown"],
+    "pexels_queries": ["person alone dark room", "mirror reflection shadow", "psychological horror dark", "mental breakdown dramatic", "isolation dark corridor", "surreal shadow person", "mind horror dark", "double exposure face dark"],
+    "characters": ["Riya", "Arjun", "Meera", "Kabir", "Priya", "Dev", "Siddharth", "Leela"],
+    "distortions": [
+      "she kept finding her own handwriting in places she had never been",
+      "the conversations he remembered having never happened according to everyone else",
+      "every photograph she took showed a version of the room that was slightly wrong",
+      "he kept waking up in rooms he had no memory of entering"
+    ],
+    "manipulations": [
+      "You have always done this. You just don't remember.",
+      "Everyone is worried about you. We have been talking about it for months.",
+      "You imagined the whole thing. I have proof.",
+      "The doctor already knows. We called them last week."
+    ],
+    "realizations": [
+      "the medication she had been taking was not prescribed by any doctor in the system",
+      "the recordings she had made of the conversations had been deleted from her own device",
+      "every person who had confirmed the story was connected to the same man",
+      "the version of herself she thought she knew had been slowly replaced. One memory at a time."
+    ],
+    "ctas": [
+      "Follow for psychological horror stories that will question everything you think is real.",
+      "Subscribe for daily mind-bending horror. The next one goes even deeper.",
+      "Share this with someone who trusts their own memory. New psychological horror every day."
+    ],
+    "script_templates": [
+      "{character} started noticing things that did not add up. Small things. {distortions} They told the people closest to them. The response was always the same. {manipulations} {character} started keeping records. A journal. Timestamps. Voice memos. Because something was happening to their memory and they needed proof it was real. Weeks passed. The records kept disappearing. Conversations they had written down stopped being in the journal. Events they had photographed vanished from the phone. But then {character} found one piece of evidence that had survived. One. Hidden inside an old coat pocket. And what it revealed was worse than forgetting. {realizations} This was not a breakdown. This was a plan. And it had been running for a very long time. {cta}",
+      "Everybody around {character} agreed the same thing was true. And when everyone agrees, you stop trusting yourself. That is how it works. That is how it is designed to work. {distortions} The therapist they sent had only one message. {manipulations} But {character} was not losing their mind. They were losing the fight. Until the night they found {realizations}. Because only one person had access to all of it. Only one person was in every room when something disappeared. Only one person had both the motive and the patience to do this for this long. And that person was still sitting at the table. Smiling. Asking if they were feeling any better today. {cta}"
+    ]
+  },
+
+  "supernatural": {
+    "keywords": ["demon", "curse", "ritual", "dark energy", "possession", "entity"],
+    "pexels_queries": ["dark ritual candle", "demon shadow dramatic", "supernatural dark forest", "cursed object night", "black smoke horror", "occult symbol dark", "supernatural light burst", "demonic shadow wall"],
+    "characters": ["Riya", "Arjun", "Meera", "Kabir", "Priya", "Dev", "Rohan", "Sanya"],
+    "cursed_objects": [
+      "an antique mirror bought from an estate sale",
+      "a locked wooden box found buried under the floorboards",
+      "an old photograph that showed the same figure in every image",
+      "a music box that played without being wound"
+    ],
+    "curse_symptoms": [
+      "everyone who touched it reported the same dream for three nights",
+      "no plant would survive in the same room as it",
+      "animals refused to enter any space where it had been kept",
+      "every person who owned it before had died within a year"
+    ],
+    "entity_descriptions": [
+      "A presence that did not have a shape but filled every corner of the room.",
+      "Something ancient. Something that had been waiting in that object since before anyone alive was born.",
+      "An intelligence. Not human. But aware. And deeply patient.",
+      "A darkness that moved with intention. That chose. That decided."
+    ],
+    "supernatural_events": [
+      "The room temperature dropped to freezing in under a minute. Every window sealed itself.",
+      "Every mirror in the house shattered simultaneously. From the inside.",
+      "The walls began bleeding in patterns that formed words in a language no one could read.",
+      "All the lights burned out. Then a single candle lit itself. In the center of the room."
+    ],
+    "ctas": [
+      "Follow for supernatural horror that goes beyond the grave. New story every night.",
+      "Subscribe for daily supernatural stories. This entity is just the beginning.",
+      "Share this if you felt something watching you. New supernatural horror every single day."
+    ],
+    "script_templates": [
+      "{character} bought {cursed_objects} without knowing its history. At first, nothing seemed wrong. But within days, {curse_symptoms}. {character} researched the object. What they found was a list of previous owners. Fourteen names across sixty years. Not one of them had kept it for more than a year. Not one had died of natural causes. {character} tried to get rid of it. But it kept coming back. On the doorstep. In the closet. Under the bed. Like it had decided this was home now. Like it had decided {character} was the one. Then came the night {supernatural_events} And in the center of it all, {entity_descriptions} And then it spoke. Not in any language. Directly into the mind. One clear message. You invited me in. You cannot ask me to leave. {cta}",
+      "It began the night {character} performed the ritual as a dare. Just words from an old book. Nobody believed it would work. But {entity_descriptions} The room changed. The air changed. Something had come through. And it was not leaving. {supernatural_events} Within hours, {curse_symptoms}. {character} called everyone who had been in that room. Four people. Two did not answer. One answered and said nothing but kept the line open for nine minutes. The fourth answered, said one sentence, and hung up. That one sentence explained everything. This entity is not new here. It has lived in this place for two hundred years. We did not summon it. We simply opened the door. And now it will decide when that door closes. {cta}"
+    ]
+  },
+
+  "slasher": {
+    "keywords": ["stalker", "hiding", "running", "survival", "hunter", "trap"],
+    "pexels_queries": ["dark empty house night", "running through forest night", "hiding in shadow", "dark staircase alone", "empty parking lot night", "door handle night horror", "locked room escape dark", "horror chase night"],
+    "characters": ["Riya", "Arjun", "Meera", "Kabir", "Priya", "Dev", "Aisha", "Rahul"],
+    "locations_sl": [
+      "the lake house at the end of the unpaved road",
+      "the old school building that had been closed since the fire",
+      "the farmhouse three kilometers from the nearest neighbor",
+      "the resort that had been shut down after the incident twelve years ago"
+    ],
+    "warning_signs": [
+      "the landline was already cut when they tried to call for help",
+      "someone had removed the car battery during the night",
+      "all the doors that had been locked were now unlocked",
+      "a set of muddy boot prints led from outside directly to their bedroom door"
+    ],
+    "hunter_details": [
+      "Patient. Never running. Just walking. Getting closer.",
+      "Methodical. Had clearly been in this building before. Knew every room.",
+      "Not driven by panic. Driven by plan. Every move was planned.",
+      "Silent. No rage. No emotion. Just purpose. That was the worst part."
+    ],
+    "survival_moments": [
+      "{character} realized the only way out was through the one room they had been avoiding",
+      "{character} stopped running and forced themselves to think. The panic was what it wanted.",
+      "{character} found the one thing in that building that could change the situation",
+      "{character} understood the pattern. And used it."
+    ],
+    "ctas": [
+      "Follow for survival horror stories every single night. The next one is closer.",
+      "Subscribe for daily slasher stories. Can you spot the mistake before the character does?",
+      "Share this if your heart rate went up. New horror survival story every day."
+    ],
+    "script_templates": [
+      "{character} arrived at {locations_sl} alone for the weekend. By the first night, {warning_signs}. {character} told themselves it was nothing. Old buildings. Isolated places. Things happen. But then came the sound. Footsteps on the floor above. Slow. Even. Deliberate. There was nobody else in the building. Nobody who should have been there. {character} grabbed a flashlight and moved through the rooms. Each one empty. Each one wrong in some small way. Something out of place. Something moved. Something that had not been that way when they arrived. Then the beam of the flashlight crossed the far wall and caught a shadow. {hunter_details} {survival_moments}. The window at the end of the hall. Six meters down. That was the calculation. Six meters and then run. And never stop running. {cta}",
+      "Three friends went to {locations_sl}. One made it out. This is what happened inside. From the beginning, {warning_signs}. They laughed about it. Made jokes. That is always the mistake. By midnight, the situation had changed completely. Something was in the building with them. {hunter_details} The first friend made the wrong decision. Ran. Never came back. The second tried to hide. We found them later. The third, {character}, did something different. {survival_moments}. Because {character} had stopped being afraid long enough to think. And in that moment of clarity, everything became simple. One exit. One chance. No second attempt. {cta}"
+    ]
+  },
+
+  "folk_horror": {
+    "keywords": ["village", "ritual", "harvest", "old ways", "ancient", "sacrifice"],
+    "pexels_queries": ["village night fog", "scarecrow field dark", "bonfire night ritual", "dark rural road fog", "ancient stone circle night", "harvest field dark", "old village night", "ritual fire dark field"],
+    "characters": ["Riya", "Arjun", "Meera", "Kabir", "Priya", "Dev", "Vikram", "Suman"],
+    "villages": [
+      "a village that did not appear on any digital map",
+      "a settlement that outsiders were never supposed to find",
+      "a village where no one ever left and no outsider ever stayed",
+      "a community that had followed the same calendar for four hundred years"
+    ],
+    "old_traditions": [
+      "Every home had a door that was never opened. Never explained.",
+      "Every night at a specific hour, every light in the village went out simultaneously.",
+      "The village had no graveyard. Nobody had ever asked where the dead were buried.",
+      "There were names that were never spoken out loud. Everyone knew which names. Nobody said why."
+    ],
+    "ritual_discoveries": [
+      "the field at the edge of the village that nobody walked through after dark",
+      "the basement beneath the community hall that had been sealed with a different kind of lock",
+      "the dates carved into every tree at the edge of the forest, matching the deaths of outsiders",
+      "the photographs in the village elder's house showing the same celebration every ten years, with different faces, but the same one person always standing at the center"
+    ],
+    "folk_horrors": [
+      "The land here does not belong to us. We belong to the land. That is the arrangement.",
+      "Every ten years, a stranger comes. Every ten years, the harvest is good. This is not coincidence.",
+      "We do not follow the old ways because we are afraid of them. We follow them because we know what happens when we do not.",
+      "You came here on your own. That means you were meant to come. That is how it has always worked."
+    ],
+    "ctas": [
+      "Follow for folk horror stories rooted in ancient dread. New story every night.",
+      "Subscribe for daily folk horror. Some traditions were never meant to be understood.",
+      "Share this if it unsettled you. New folk horror drops every single day."
+    ],
+    "script_templates": [
+      "{character} drove through {villages} by accident. The car died at the edge of it. The people were kind. Too kind. Welcoming in a way that felt like a script everyone had rehearsed. {old_traditions} {character} noticed. Filed it away. But something kept them from leaving even after the car was fixed. Something about the way people spoke. The way they watched. On the second night, {character} found {ritual_discoveries}. And began to understand that this place had a system. Old. Precise. And entirely dependent on one thing arriving from the outside at regular intervals. That thing was a stranger. {folk_horrors} {character} tried the car one more time. It started. They drove. And in the rearview mirror, every person in the village had come outside to watch them leave. All standing in a line. All perfectly still. All smiling. {cta}",
+      "The researcher studying {villages} disappeared for eleven days. When she returned, {character} could not explain where she had been. But she brought back one thing. A recording. Made inside {ritual_discoveries}. On the recording, a voice. Old. Speaking calmly, directly into the recorder. {folk_horrors} The recording was seventeen minutes long. For the first twelve minutes, it was that voice. For the last five minutes, it was {character}. But {character} had no memory of speaking. No memory of those five minutes. No memory of saying the one sentence that ended the recording. The sentence that made everyone who heard it immediately book an appointment with a doctor. The sentence that went: I am already back. I have been back since the first day. You are the one who has not returned yet. {cta}"
+    ]
   }
 }
