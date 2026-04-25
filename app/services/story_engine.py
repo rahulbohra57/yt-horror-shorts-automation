@@ -265,20 +265,60 @@ class StoryEngine:
         return f"{base.title()} #Shorts"
 
     def _generate_seo(self, title: str, niche: str) -> dict:
-        base_tags = ["#shorts", "#story", "#viral", "#ytshorts"]
-        niche_tags = {
-            "moral": ["#moralstory", "#lifelesson", "#motivation"],
-            "mystery": ["#mystery", "#thriller", "#suspense"],
-            "horror": ["#horror", "#scarystory", "#creepy"],
-            "motivation": ["#motivation", "#success", "#mindset"],
-            "relationship": ["#love", "#relationship", "#drama"],
+        ch = settings.CHANNEL_NAME
+        niche_descriptions = {
+            "horror": (
+                f"{title}\n\n"
+                f"😱 One minute. One story. One nightmare.\n\n"
+                f"Watch till the end… the twist is waiting for you. 👀\n"
+                f"If this scared you, hit subscribe for daily horror shorts → @{ch}\n\n"
+                f"🩸 New scary stories every week\n"
+                f"👻 Ghosts • Mysteries • Dark Tales • Paranormal\n\n"
+                f"#shorts #horror #scary #creepy #ghoststory #thriller "
+                f"#haunted #paranormal #horrorshorts\n\n"
+                f"horror shorts, scary shorts, horror stories, ghost stories, creepy videos, "
+                f"short horror films, scary youtube shorts, haunted stories, paranormal shorts, "
+                f"dark stories, horror reels, creepy tales, horror channel, scary endings, "
+                f"1 minute horror, jumpscare shorts, horror india, scary stories hindi, "
+                f"horror twist story, spooky shorts"
+            ),
+            "mystery": (
+                f"{title}\n\n"
+                f"🔍 One minute. One mystery. Zero answers.\n\n"
+                f"Watch till the end… the truth will shock you. 😱\n"
+                f"Subscribe for daily mystery shorts → @{ch}\n\n"
+                f"🎯 New mysteries every week\n"
+                f"🕵️ Thrillers • Twists • Dark Secrets • Unsolved Cases\n\n"
+                f"#shorts #mystery #thriller #suspense #crimestory "
+                f"#detective #mysterystory #crimethriller #mysteryshorts\n\n"
+                f"mystery shorts, thriller shorts, mystery stories, crime stories, dark secrets, "
+                f"short mystery films, mystery youtube shorts, unsolved mysteries, detective stories, "
+                f"plot twist shorts, mystery channel, shocking endings, 1 minute mystery, "
+                f"crime thriller shorts, mystery india, crime stories hindi, mystery twist story"
+            ),
         }
-        tags = base_tags + niche_tags.get(niche, [])
-        description = (
+        niche_tags = {
+            "horror": [
+                "shorts", "horror", "scary", "creepy", "ghoststory", "thriller",
+                "haunted", "paranormal", "horrorshorts", "horror shorts", "scary shorts",
+                "horror stories", "ghost stories", "creepy videos", "haunted stories",
+                "paranormal shorts", "dark stories", "horror reels", "1 minute horror",
+                "jumpscare shorts", "horror twist story", "spooky shorts",
+            ],
+            "mystery": [
+                "shorts", "mystery", "thriller", "suspense", "crimestory", "detective",
+                "mysterystory", "crimethriller", "mysteryshorts", "mystery shorts",
+                "thriller shorts", "mystery stories", "crime stories", "dark secrets",
+                "plot twist shorts", "detective stories", "1 minute mystery",
+                "mystery twist story", "crime thriller shorts",
+            ],
+        }
+        description = niche_descriptions.get(niche, (
             f"{title}\n\n"
-            f"A powerful {niche} story that will stay with you.\n"
+            f"A compelling story that will stay with you.\n"
             f"Watch till the end — the twist will surprise you.\n\n"
-            f"Subscribe for daily stories → @{settings.CHANNEL_NAME}\n\n"
-            + " ".join(tags)
-        )
+            f"Subscribe for daily stories → @{ch}\n\n"
+            f"#shorts #story #viral #ytshorts"
+        ))
+        tags = niche_tags.get(niche, ["shorts", "story", "viral", "ytshorts"])
         return {"title": title, "description": description, "tags": tags}
