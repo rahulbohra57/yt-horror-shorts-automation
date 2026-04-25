@@ -1,6 +1,6 @@
 import logging
 import secrets
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.api.deps import get_db
@@ -114,6 +114,41 @@ async def _run_pipeline(niche: str, job_id: str, upload: bool):
         await pipeline.run(niche=niche, job_id=job_id, session=session, upload=upload)
     finally:
         session.close()
+
+
+@router.post("/telegram/webhook")
+async def telegram_webhook(request: Request):
+    data = await request.json()
+    message = data.get("message", {})
+    text = (message.get("text") or "").strip().upper()
+    chat_id = message.get("chat", {}).get("id")
+
+    if not chat_id or text != "STATS":
+        return {"ok": True}
+
+    from app.services.telegram_service import TelegramService
+    from app.services.youtube_service import YouTubeService
+
+    telegram = TelegramService(settings.TELEGRAM_BOT_TOKEN, settings.TELEGRAM_CHAT_ID)
+    youtube = YouTubeService(
+        client_id=settings.YOUTUBE_CLIENT_ID,
+        client_secret=settings.YOUTUBE_CLIENT_SECRET,
+        refresh_token=settings.YOUTUBE_REFRESH_TOKEN,
+    )
+    try:
+        stats = youtube.get_channel_stats()
+        msg = (
+            f"📊 <b>Channel Stats</b>\n\n"
+            f"👥 Subscribers: <b>{stats['subscribers']:,}</b>\n"
+            f"👁 Total Views: <b>{stats['views']:,}</b>\n"
+            f"🎬 Videos: <b>{stats['videos']:,}</b>"
+        )
+    except Exception as e:
+        logger.error(f"Failed to fetch YouTube stats for Telegram: {e}", exc_info=True)
+        msg = f"❌ Could not fetch stats: {e}"
+
+    await telegram.reply(chat_id, msg)
+    return {"ok": True}
 
 
 def _pick_scheduled_niche(db: Session) -> str:

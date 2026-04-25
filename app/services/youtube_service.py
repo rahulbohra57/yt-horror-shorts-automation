@@ -9,6 +9,7 @@ from time import sleep
 logger = logging.getLogger(__name__)
 
 YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload"
+YOUTUBE_READONLY_SCOPE = "https://www.googleapis.com/auth/youtube.readonly"
 CATEGORY_ENTERTAINMENT = "22"
 
 
@@ -113,13 +114,28 @@ class YouTubeService:
             }
         }
 
-    def _get_service(self):
+    def get_channel_stats(self) -> dict:
+        service = self._get_service(scopes=[YOUTUBE_READONLY_SCOPE])
+        response = service.channels().list(part="statistics,snippet", mine=True).execute()
+        items = response.get("items", [])
+        if not items:
+            raise RuntimeError("No channel data returned from YouTube API")
+        stats = items[0]["statistics"]
+        snippet = items[0]["snippet"]
+        return {
+            "name": snippet.get("title", ""),
+            "subscribers": int(stats.get("subscriberCount", 0)),
+            "views": int(stats.get("viewCount", 0)),
+            "videos": int(stats.get("videoCount", 0)),
+        }
+
+    def _get_service(self, scopes: list[str] | None = None):
         creds = Credentials(
             token=None,
             refresh_token=self.refresh_token,
             client_id=self.client_id,
             client_secret=self.client_secret,
             token_uri="https://oauth2.googleapis.com/token",
-            scopes=[YOUTUBE_UPLOAD_SCOPE],
+            scopes=scopes or [YOUTUBE_UPLOAD_SCOPE],
         )
         return build("youtube", "v3", credentials=creds, cache_discovery=False)

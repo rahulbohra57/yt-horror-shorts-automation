@@ -4,6 +4,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
+TELEGRAM_SET_WEBHOOK = "https://api.telegram.org/bot{token}/setWebhook"
 
 
 class TelegramService:
@@ -53,3 +54,39 @@ class TelegramService:
             f"Job ID: <code>{job_id}</code>\n"
             f"Error: <code>{short_error}</code>"
         )
+
+    async def reply(self, chat_id: int | str, text: str) -> None:
+        """Send a message to a specific chat (used to reply to webhook messages)."""
+        if not self._token:
+            return
+        url = TELEGRAM_API.format(token=self._token)
+        payload = {
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(url, json=payload)
+                resp.raise_for_status()
+        except Exception as e:
+            logger.warning(f"Telegram reply failed: {e}")
+
+    async def register_webhook(self, app_url: str) -> None:
+        """Register the Telegram webhook with our FastAPI endpoint URL."""
+        if not self._token:
+            logger.debug("Telegram not configured, skipping webhook registration")
+            return
+        webhook_url = f"{app_url.rstrip('/')}/telegram/webhook"
+        url = TELEGRAM_SET_WEBHOOK.format(token=self._token)
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(url, json={"url": webhook_url, "allowed_updates": ["message"]})
+                data = resp.json()
+            if data.get("ok"):
+                logger.info(f"Telegram webhook registered: {webhook_url}")
+            else:
+                logger.warning(f"Telegram webhook registration failed: {data}")
+        except Exception as e:
+            logger.warning(f"Telegram webhook registration error: {e}")

@@ -18,11 +18,14 @@ scheduler = DailyScheduler()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Import all models before init_db so create_all picks them up
     from app.core import models  # noqa: F401
+    from app.services.telegram_service import TelegramService
     init_db(settings.DB_PATH)
     if settings.SCHEDULER_ENABLED:
         scheduler.start()
+    if settings.APP_URL and settings.TELEGRAM_BOT_TOKEN:
+        telegram = TelegramService(settings.TELEGRAM_BOT_TOKEN, settings.TELEGRAM_CHAT_ID)
+        await telegram.register_webhook(settings.APP_URL)
     yield
     if settings.SCHEDULER_ENABLED:
         scheduler.stop()
