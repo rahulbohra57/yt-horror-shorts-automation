@@ -24,3 +24,15 @@ services:
         value: /tmp/shorts_output
       - key: SCHEDULER_ENABLED
         value: "false"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: YOUTUBE_API_KEY
+        sync: false
+      - key: YOUTUBE_CHANNEL_HANDLE
+        sync: false
