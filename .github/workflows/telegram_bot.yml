@@ -1,0 +1,44 @@
+name: Telegram Command Bot
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # every 30 minutes — Telegram API only, no YouTube quota
+  workflow_dispatch:
+
+jobs:
+  handle_commands:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write   # needed to dispatch scheduled_uploads.yml
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Restore Offset Cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .data/tg_cmd_offset.txt
+          key: tg-cmd-offset-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            tg-cmd-offset-${{ github.ref_name }}-
+
+      - name: Install Dependencies
+        run: pip install httpx pydantic-settings python-dotenv
+
+      - name: Handle Telegram Commands
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/telegram_commands.py
+
+      - name: Save Offset Cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .data/tg_cmd_offset.txt
+          key: tg-cmd-offset-${{ github.ref_name }}-${{ github.run_id }}
