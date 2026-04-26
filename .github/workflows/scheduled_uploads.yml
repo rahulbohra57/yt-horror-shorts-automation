@@ -73,6 +73,7 @@ jobs:
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
           CHANNEL_NAME: ${{ secrets.CHANNEL_NAME }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           DB_PATH: .data/shorts.db
@@ -82,7 +83,7 @@ jobs:
           ALLOW_GTTS_FALLBACK: "true"
         run: |
           set -euo pipefail
-          if [ -z "${PEXELS_API_KEY}" ] || [ -z "${YOUTUBE_CLIENT_ID}" ] || [ -z "${YOUTUBE_CLIENT_SECRET}" ] || [ -z "${YOUTUBE_REFRESH_TOKEN}" ]; then
+          if [ -z "${PEXELS_API_KEY}" ] || [ -z "${YOUTUBE_CLIENT_ID}" ] || [ -z "${YOUTUBE_CLIENT_SECRET}" ] || [ -z "${YOUTUBE_REFRESH_TOKEN}" ] || [ -z "${GEMINI_API_KEY}" ]; then
             echo "Required secrets are missing"
             exit 1
           fi
