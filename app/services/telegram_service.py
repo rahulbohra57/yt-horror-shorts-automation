@@ -55,6 +55,15 @@ class TelegramService:
             f"Error: <code>{short_error}</code>"
         )
 
+    async def notify_gemini_failed(self, niche: str, error: str) -> None:
+        short_error = error[:400] if len(error) > 400 else error
+        await self.send(
+            f"🤖 <b>Gemini story generation failed</b>\n"
+            f"Niche: <code>{niche}</code>\n"
+            f"Error: <code>{short_error}</code>\n\n"
+            f"⚠️ Check your GEMINI_API_KEY or quota. Pipeline has been stopped."
+        )
+
     async def reply(self, chat_id: int | str, text: str) -> None:
         """Send a message to a specific chat (used to reply to webhook messages)."""
         if not self._token:

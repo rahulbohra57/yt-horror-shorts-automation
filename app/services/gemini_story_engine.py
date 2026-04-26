@@ -13,6 +13,10 @@ logger = logging.getLogger(__name__)
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 
+
+class GeminiFailedError(RuntimeError):
+    """Raised when Gemini story generation fails. Pipeline should notify the user."""
+
 NICHE_PROMPTS = {
     "horror": {
         "genre": "horror",
@@ -160,10 +164,9 @@ SEO_CONFIGS = {
 
 
 class GeminiStoryEngine:
-    """Generates unique story scripts via Gemini API with template fallback."""
+    """Generates unique story scripts via Gemini API. Raises GeminiFailedError on failure."""
 
-    def __init__(self, fallback_engine=None):
-        self._fallback = fallback_engine
+    def __init__(self):
         self._niches = self._load_niches()
         self._hooks = self._load_hooks()
         genai.configure(api_key=settings.GEMINI_API_KEY)
@@ -204,24 +207,16 @@ class GeminiStoryEngine:
         }
 
     def _generate_with_fallback(self, niche: str, recent: list[str]) -> tuple[str, str]:
-        """Try Gemini; on any failure use template engine; on template failure raise."""
         try:
             return self._call_gemini(niche, recent)
         except Exception as e:
-            logger.warning(
-                "[GeminiStoryEngine] Gemini failed (%s: %s). Falling back to template engine.",
+            logger.error(
+                "[GeminiStoryEngine] Gemini failed (%s: %s). Aborting — no template fallback.",
                 type(e).__name__, str(e)[:200],
             )
-        if self._fallback:
-            story = self._fallback.generate(niche, recent_scripts=recent)
-            return story["hook"], story["script"]
-        raise RuntimeError(f"Gemini failed and no template fallback configured for niche='{niche}'")
+            raise GeminiFailedError(f"{type(e).__name__}: {str(e)[:300]}") from e
 
     def _call_gemini(self, niche: str, recent_scripts: list[str]) -> tuple[str, str]:
-        config = NICHE_PROMPTS.get(niche, NICHE_PROMPTS["horror"])
-
-        hook_examples = "\n".join(f"- {h}" for h in self._hooks[:6])
-
         # Summarize recent story openings so Gemini actively avoids them
         recent_openings = []
         for s in recent_scripts[:15]:
@@ -231,32 +226,53 @@ class GeminiStoryEngine:
         avoid_block = ""
         if recent_openings:
             avoid_block = (
-                "\n\nCRITICAL: Do NOT reuse or closely resemble ANY of these recent story openings:\n"
+                "\n\nCRITICAL: Do NOT start the story with ANY of these opening lines or anything similar:\n"
                 + "\n".join(recent_openings)
+                + "\nEvery story MUST have a completely different opening situation, character, and premise."
             )
 
-        prompt = f"""You are a viral YouTube Shorts scriptwriter specializing in {config['genre']} stories.
+        prompt = f"""You are an expert short-form storyteller for YouTube Shorts. Generate a **high-retention 60-second story** in the genres of **Horror, Mystery, Paranormal, Thriller, Urban Legend, Psychological Fear, Supernatural, or Dark Twist**.
 
-Write a BRAND NEW, completely original {config['genre']} story script for a YouTube Short. Every story must be unique — different character, different situation, different events.
+### Requirements:
 
-Requirements:
-- Total length: 170–210 words (count carefully — must be in this range)
-- Tone: {config['tone']}
-- Must include: {config['elements']}
-- Opening hook: A single gripping sentence that hooks viewers in the first 2 seconds
-- Pacing: One punchy sentence every 1-2 seconds, pattern interrupt every 5 seconds
-- Ending: {config['ending']}
-- Last 1-2 sentences: A subscribe/follow CTA (e.g. "Subscribe for more." / "Follow for daily horror.")
-- Use Indian names for characters (Riya, Arjun, Meera, Kabir, Priya, Dev, Ishaan, Ananya, Siddharth, Leela, Vikram, Nisha, etc.)
-- DO NOT use: ellipsis (...), em dashes (—), asterisks, or markdown formatting in the script
-- Write in plain prose — no bullet points, no headers, no special characters
+* Story length: **130–170 words max** (fits under 1 minute voiceover)
+* Start with an **instant hook in first sentence** that creates curiosity/shock.
+* Maintain suspense every few lines.
+* Use simple, cinematic language.
+* Include 1 main character only (unless necessary).
+* Use Indian names for characters (Riya, Arjun, Meera, Kabir, Priya, Dev, Ishaan, Ananya, Siddharth, Leela, Vikram, Nisha, etc.)
+* Story should feel realistic at first, then become disturbing.
+* Build tension quickly.
+* End with an **unexpected twist ending** that shocks viewers.
+* Final line must be memorable and creepy.
+* Avoid slow setup or unnecessary details.
+* Last 1-2 sentences: A subscribe/follow CTA (e.g. "Subscribe for more dark stories." / "Follow for daily horror.")
+* DO NOT use: ellipsis (...), em dashes (—), asterisks, or markdown formatting in the script
+* Write in plain prose — no bullet points, no headers, no special characters
 
-Hook style examples (create your OWN unique hook — do NOT copy these):
-{hook_examples}
+### Structure:
+
+1. **Hook (0-5 sec):** shocking or mysterious opening line
+2. **Build-up (5-35 sec):** strange events escalate
+3. **Reveal (35-50 sec):** terrifying truth appears
+4. **Twist Ending (50-60 sec):** unexpected final punch
+
+### Tone:
+
+Dark, suspenseful, binge-worthy, viral, cinematic.
+
+### Example Hooks (create your OWN completely unique hook — do NOT copy or resemble these):
+
+* Every night, someone knocks on my window from the 10th floor.
+* I found a photo of myself sleeping, taken yesterday.
+* The voice from my basement knew my name.
+* My dead grandmother called me at 3:03 AM.
+* I moved into a house where mirrors blink first.
 {avoid_block}
 
 Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw JSON object:
-{{"hook": "<opening hook sentence only, no punctuation issues>", "script": "<complete 170-210 word script including hook at the start, full story, and CTA at the end>"}}"""
+{{"hook": "<opening hook sentence only>", "script": "<complete 130-170 word script including hook at the start, full story, and CTA at the end>"}}"""
+
 
         response = self._model.generate_content(
             prompt,
