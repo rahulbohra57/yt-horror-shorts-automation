@@ -240,13 +240,13 @@ class GeminiStoryEngine:
 * Maintain suspense every few lines.
 * Use simple, cinematic language.
 * Include 1 main character only (unless necessary).
-* Use Indian names for characters (Riya, Arjun, Meera, Kabir, Priya, Dev, Ishaan, Ananya, Siddharth, Leela, Vikram, Nisha, etc.)
+* Use a MIX of character names — American (Jake, Emma, Ryan, Sarah, Tyler, Ashley, Michael, Jessica, Chris, Melissa), British (Oliver, Charlotte, Harry, Amelia, James, Sophie, George, Lily, Thomas, Isabelle), or Indian (Riya, Arjun, Meera, Kabir, Priya, Dev, Ananya, Vikram). Do NOT always use Indian names — vary nationality each story.
 * Story should feel realistic at first, then become disturbing.
 * Build tension quickly.
 * End with an **unexpected twist ending** that shocks viewers.
 * Final line must be memorable and creepy.
 * Avoid slow setup or unnecessary details.
-* Last 1-2 sentences: A subscribe/follow CTA (e.g. "Subscribe for more dark stories." / "Follow for daily horror.")
+* MANDATORY ENDING: The very last sentence MUST be a CTA. Choose one: "Subscribe for more dark stories." / "Follow for daily horror shorts." / "Like and subscribe if this scared you." The story is INCOMPLETE without this final CTA sentence.
 * DO NOT use: ellipsis (...), em dashes (—), asterisks, or markdown formatting in the script
 * Write in plain prose — no bullet points, no headers, no special characters
 
@@ -279,7 +279,7 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
             generation_config=genai.types.GenerationConfig(
                 temperature=1.0,
                 top_p=0.95,
-                max_output_tokens=1024,
+                max_output_tokens=2048,
             ),
         )
         text = response.text.strip()
@@ -293,6 +293,9 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
         hook = parsed["hook"].strip()
         script = parsed["script"].strip()
 
+        # Ensure story ends with a complete sentence + CTA
+        script = self._ensure_complete_story(script, niche)
+
         word_count = len(script.split())
         logger.info(
             "[GeminiStoryEngine] Generated niche=%s words=%d hook='%s...'",
@@ -300,6 +303,40 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
         )
 
         return hook, script
+
+    _CTA_KEYWORDS = ("subscribe", "follow", "like and subscribe", "daily horror", "dark stories")
+    _NICHE_CTA = {
+        "horror": "Like and subscribe for daily horror shorts.",
+        "mystery": "Like and subscribe for daily mystery shorts.",
+        "paranormal": "Like and subscribe for daily paranormal stories.",
+        "twist_endings": "Like and subscribe for daily twist endings.",
+        "psychological": "Like and subscribe for daily psychological horror.",
+        "supernatural": "Like and subscribe for daily supernatural horror.",
+        "slasher": "Like and subscribe for daily survival horror.",
+        "folk_horror": "Like and subscribe for daily folk horror.",
+    }
+
+    def _ensure_complete_story(self, script: str, niche: str) -> str:
+        """Guarantee the script ends with a complete sentence and a CTA."""
+        script = script.strip()
+
+        # If the script ends mid-sentence (no terminal punctuation), truncate at last complete sentence
+        if script and script[-1] not in ".!?":
+            last_end = max(script.rfind("."), script.rfind("!"), script.rfind("?"))
+            if last_end > len(script) // 2:
+                script = script[: last_end + 1].strip()
+                logger.warning("[GeminiStoryEngine] Script was truncated mid-sentence — trimmed to last complete sentence")
+            else:
+                script = script.rstrip() + "."
+
+        # If no CTA present, append one
+        lower = script.lower()
+        if not any(kw in lower for kw in self._CTA_KEYWORDS):
+            cta = self._NICHE_CTA.get(niche, "Like and subscribe for more dark stories.")
+            script = script + " " + cta
+            logger.warning("[GeminiStoryEngine] No CTA found in script — appended: %s", cta)
+
+        return script
 
     def _generate_title(self, niche: str, hook: str) -> str:
         label = GENRE_LABELS.get(niche, "Horror")
