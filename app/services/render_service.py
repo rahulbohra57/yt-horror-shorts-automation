@@ -61,7 +61,7 @@ class RenderService:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def render(self, video_paths: list[str], audio_path: str, script: str, job_id: str, word_timings: list = None, niche: str = "") -> str:
+    def render(self, video_paths: list[str], audio_path: str, script: str, job_id: str, word_timings: list = None, niche: str = "", cta: str = "") -> str:
         """
         Full pipeline:
           1. Merge/crop background video clips to 1080x1920 at audio duration
@@ -75,7 +75,7 @@ class RenderService:
             logger.info(f"Background music: {Path(music_path).name}")
         with tempfile.TemporaryDirectory() as tmp:
             merged_bg = self._merge_and_crop_videos(video_paths, audio_path, tmp)
-            captioned = self._add_captions(merged_bg, script, audio_path, tmp, word_timings)
+            captioned = self._add_captions(merged_bg, script, audio_path, tmp, word_timings, cta=cta)
             self._normalize_audio(captioned, str(output_path), music_path=music_path)
         logger.info(f"Rendered: {output_path}")
         return str(output_path)
@@ -152,23 +152,23 @@ class RenderService:
     # Step 2: add captions
     # ------------------------------------------------------------------
 
-    def _add_captions(self, video_path: str, script: str, audio_path: str, tmp: str, word_timings: list = None) -> str:
+    def _add_captions(self, video_path: str, script: str, audio_path: str, tmp: str, word_timings: list = None, cta: str = "") -> str:
         if _SUBTITLES_AVAILABLE:
             try:
-                return self._add_captions_srt(video_path, script, audio_path, tmp, word_timings)
+                return self._add_captions_srt(video_path, script, audio_path, tmp, word_timings, cta=cta)
             except Exception as e:
                 logger.warning(f"SRT captions failed ({e}), falling back to drawtext")
         try:
-            return self._add_captions_drawtext(video_path, script, audio_path, tmp, word_timings)
+            return self._add_captions_drawtext(video_path, script, audio_path, tmp, word_timings, cta=cta)
         except Exception as e:
             logger.warning(f"drawtext captions failed ({e}), muxing without captions")
             return self._mux_audio_only(video_path, audio_path, tmp)
 
     # --- libass / SRT path (when subtitles filter is available) ---
 
-    def _add_captions_srt(self, video_path: str, script: str, audio_path: str, tmp: str, word_timings: list = None) -> str:
+    def _add_captions_srt(self, video_path: str, script: str, audio_path: str, tmp: str, word_timings: list = None, cta: str = "") -> str:
         out = Path(tmp) / "captioned.mp4"
-        srt_path = self._generate_srt(script, audio_path, tmp, word_timings)
+        srt_path = self._generate_srt(script, audio_path, tmp, word_timings, cta=cta)
         escaped_srt = str(srt_path).replace("\\", "/").replace(":", "\\:")
         font_arg = f",FontName=Helvetica" if not _SYSTEM_FONT else ""
         cmd = [
@@ -187,11 +187,11 @@ class RenderService:
 
     # --- Pillow PNG overlay path (no drawtext/subtitles filter needed) ---
 
-    def _add_captions_drawtext(self, video_path: str, script: str, audio_path: str, tmp: str, word_timings: list = None) -> str:
+    def _add_captions_drawtext(self, video_path: str, script: str, audio_path: str, tmp: str, word_timings: list = None, cta: str = "") -> str:
         from PIL import Image
 
         out = Path(tmp) / "captioned.mp4"
-        caption_data = self._get_caption_segments(script, audio_path, word_timings)
+        caption_data = self._get_caption_segments(script, audio_path, word_timings, cta=cta)
         total_dur = self._get_duration(audio_path)
         font = self._load_caption_font()
 
@@ -401,9 +401,9 @@ class RenderService:
     # Helpers
     # ------------------------------------------------------------------
 
-    def _generate_srt(self, script: str, audio_path: str, tmp: str, word_timings: list = None) -> Path:
+    def _generate_srt(self, script: str, audio_path: str, tmp: str, word_timings: list = None, cta: str = "") -> Path:
         srt_path = Path(tmp) / "captions.srt"
-        captions = self._get_caption_segments(script, audio_path, word_timings)
+        captions = self._get_caption_segments(script, audio_path, word_timings, cta=cta)
         with open(srt_path, "w", encoding="utf-8") as f:
             for i, (start, end, text) in enumerate(captions):
                 f.write(f"{i + 1}\n")
@@ -411,17 +411,17 @@ class RenderService:
                 f.write(f"{text}\n\n")
         return srt_path
 
-    def _get_caption_segments(self, script: str, audio_path: str, word_timings: list = None) -> list:
+    def _get_caption_segments(self, script: str, audio_path: str, word_timings: list = None, cta: str = "") -> list:
         """Returns list of (start_sec, end_sec, text) caption groups — compact word chunks."""
         clean_script = script.replace('"', '').replace('"', '').replace('"', '')
         duration = self._get_duration(audio_path)
+
         if word_timings:
             chunks = self._align_words_to_caption_chunks(word_timings, clean_script)
             if chunks:
-                # Extend the last segment to cover through the end of audio
-                last = chunks[-1]
-                chunks[-1] = (last[0], max(last[1], duration - 0.05), last[2])
+                chunks = self._force_cta_at_end(chunks, clean_script, cta, duration)
                 return chunks
+
         words = clean_script.split()
         if not words:
             return [(0.0, duration, clean_script)]
@@ -435,6 +435,44 @@ class RenderService:
             segments.append((start, end, " ".join(chunk_words)))
             i += CAPTION_WORDS_PER_SEGMENT
         return segments
+
+    def _force_cta_at_end(self, chunks: list, clean_script: str, cta: str, duration: float) -> list:
+        """Ensure the CTA always appears as the final subtitle chunk(s)."""
+        if not cta:
+            last = chunks[-1]
+            chunks[-1] = (last[0], max(last[1], duration - 0.05), last[2])
+            return chunks
+
+        cta_clean = cta.replace('"', '').replace('"', '').replace('"', '').strip()
+        cta_words = cta_clean.split()
+        total_words = len(clean_script.split())
+
+        # Estimate the start time of the CTA proportionally within the audio
+        story_word_count = max(total_words - len(cta_words), 1)
+        cta_start_time = (story_word_count / total_words) * duration
+
+        # Keep only story-body chunks that end before the CTA starts
+        story_chunks = [(s, e, t) for s, e, t in chunks if s < cta_start_time]
+        if not story_chunks:
+            story_chunks = chunks[:max(1, len(chunks) - len(cta_words) // CAPTION_WORDS_PER_SEGMENT)]
+
+        # Trim the last story chunk's end to cta_start_time
+        last_s, last_e, last_t = story_chunks[-1]
+        story_chunks[-1] = (last_s, min(last_e, cta_start_time), last_t)
+
+        # Force CTA as final subtitle chunk(s)
+        cta_duration = duration - cta_start_time
+        secs_per_word = cta_duration / max(len(cta_words), 1)
+        i = 0
+        while i < len(cta_words):
+            chunk_w = cta_words[i:i + CAPTION_WORDS_PER_SEGMENT]
+            s = cta_start_time + i * secs_per_word
+            e = min(cta_start_time + (i + len(chunk_w)) * secs_per_word, duration - 0.05)
+            e = max(e, s + 0.3)
+            story_chunks.append((s, e, " ".join(chunk_w)))
+            i += CAPTION_WORDS_PER_SEGMENT
+
+        return story_chunks
 
     @staticmethod
     def _align_words_to_caption_chunks(word_timings: list, script: str = "") -> list:

@@ -192,21 +192,21 @@ class GeminiStoryEngine:
         pexels_queries = niche_data.get("pexels_queries", ["dark horror scene", "night horror", "scary dark"])
         pexels_query = random.choice(pexels_queries)
 
-        hook, script = self._generate_with_fallback(niche, recent)
+        hook, script, cta = self._generate_with_fallback(niche, recent)
 
         title = self._generate_title(niche, hook)
         return {
             "niche": niche,
             "hook": hook,
             "script": script,
+            "cta": cta,
             "title": title,
             "pexels_query": pexels_query,
             "pexels_queries": pexels_queries,
-            "cta": "Subscribe for more stories like this.",
             "seo": self._generate_seo(title, niche),
         }
 
-    def _generate_with_fallback(self, niche: str, recent: list[str]) -> tuple[str, str]:
+    def _generate_with_fallback(self, niche: str, recent: list[str]) -> tuple[str, str, str]:
         try:
             return self._call_gemini(niche, recent)
         except Exception as e:
@@ -216,7 +216,7 @@ class GeminiStoryEngine:
             )
             raise GeminiFailedError(f"{type(e).__name__}: {str(e)[:300]}") from e
 
-    def _call_gemini(self, niche: str, recent_scripts: list[str]) -> tuple[str, str]:
+    def _call_gemini(self, niche: str, recent_scripts: list[str]) -> tuple[str, str, str]:
         # Summarize recent story openings so Gemini actively avoids them
         recent_openings = []
         for s in recent_scripts[:15]:
@@ -308,7 +308,7 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
             niche, word_count, cta, hook[:50],
         )
 
-        return hook, script
+        return hook, script, cta
 
     _CTA_POOL = [
         "If this scared you, smash Like before it finds you.",

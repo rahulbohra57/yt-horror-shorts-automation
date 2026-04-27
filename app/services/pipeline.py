@@ -113,7 +113,7 @@ class Pipeline:
 
             logger.info(f"[{job_id}] Rendering video")
             update_status(JobStatus.RENDERING)
-            video_path = self.renderer.render(video_paths, audio_path, story["script"], job_id, word_timings=word_timings, niche=niche)
+            video_path = self.renderer.render(video_paths, audio_path, story["script"], job_id, word_timings=word_timings, niche=niche, cta=story.get("cta", ""))
 
             youtube_url = None
             gdrive_url = None
