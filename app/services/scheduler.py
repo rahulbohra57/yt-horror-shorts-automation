@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import random
 import threading
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -78,22 +79,45 @@ class DailyScheduler:
         self.scheduler.shutdown(wait=False)
 
     def _pick_niche(self, session) -> str:
+        """
+        Shuffled-batch selection: cycle through all niches in a random order,
+        then reshuffle for the next round. Guarantees every genre appears once
+        per batch with no predictable pattern.
+        """
         niches = self._niches()
-        last = (
-            session.query(Short)
-            .filter(Short.niche.in_(niches))
-            .order_by(Short.created_at.desc(), Short.id.desc())
-            .first()
-        )
-        if not last:
-            return niches[0]
         if len(niches) == 1:
             return niches[0]
-        try:
-            idx = niches.index(last.niche)
-            return niches[(idx + 1) % len(niches)]
-        except ValueError:
-            return niches[0]
+
+        # Look back 2 full batches to reliably detect the batch boundary.
+        recent_rows = (
+            session.query(Short.niche)
+            .filter(Short.niche.in_(niches))
+            .order_by(Short.created_at.desc(), Short.id.desc())
+            .limit(len(niches) * 2)
+            .all()
+        )
+        recent = [row[0] for row in recent_rows]
+
+        # Walk backwards from the most recent post. The first repeated niche
+        # marks the end of the previous batch — everything before it is the
+        # current batch's already-used genres.
+        used = set()
+        for n in recent:
+            if n in used:
+                break
+            used.add(n)
+
+        remaining = [n for n in niches if n not in used]
+        if not remaining:
+            # Current batch complete — start a fresh shuffled batch.
+            remaining = list(niches)
+
+        chosen = random.choice(remaining)
+        logger.info(
+            "Niche picker: used_this_batch=%s remaining=%s chosen=%s",
+            sorted(used), remaining, chosen,
+        )
+        return chosen
 
     def _run_daily_job(self):
         if not self._run_lock.acquire(blocking=False):
