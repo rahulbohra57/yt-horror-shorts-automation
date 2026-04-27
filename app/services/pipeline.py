@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import random
+import requests
 from app.core.config import settings
 from app.core.models import JobStatus, Short
 from app.services.gemini_story_engine import GeminiStoryEngine, GeminiFailedError
@@ -131,6 +132,24 @@ class Pipeline:
                         logger.info(f"[{job_id}] Cloudinary URL: {cloudinary_url}")
                     except Exception as cd_err:
                         logger.warning(f"[{job_id}] Cloudinary upload failed (non-fatal): {cd_err}")
+
+                if cloudinary_url and settings.MAKE_WEBHOOK_URL:
+                    try:
+                        logger.info(f"[{job_id}] Firing Make.com webhook")
+                        resp = requests.post(
+                            settings.MAKE_WEBHOOK_URL,
+                            json={
+                                "cloudinary_url": cloudinary_url,
+                                "youtube_url": youtube_url,
+                                "title": story["title"],
+                                "niche": niche,
+                                "job_id": job_id,
+                            },
+                            timeout=15,
+                        )
+                        logger.info(f"[{job_id}] Webhook response: {resp.status_code}")
+                    except Exception as wh_err:
+                        logger.warning(f"[{job_id}] Make.com webhook failed (non-fatal): {wh_err}")
 
                 if self.gdrive:
                     try:
