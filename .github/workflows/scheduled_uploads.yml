@@ -6,16 +6,6 @@ on:
     - cron: '10 6 * * *'
     - cron: '10 12 * * *'
     - cron: '10 18 * * *'
-  workflow_dispatch:
-    inputs:
-      niche:
-        description: "auto, horror, mystery, paranormal, twist_endings, psychological, supernatural, slasher, folk_horror"
-        required: false
-        default: "auto"
-      upload:
-        description: "true or false"
-        required: false
-        default: "true"
 
 jobs:
   generate_and_upload:
@@ -55,16 +45,8 @@ jobs:
         id: resolve
         shell: bash
         run: |
-          niche="auto"
-          upload="true"
-
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            niche="${{ github.event.inputs.niche }}"
-            upload="${{ github.event.inputs.upload }}"
-          fi
-
-          echo "niche=${niche}" >> "$GITHUB_OUTPUT"
-          echo "upload=${upload}" >> "$GITHUB_OUTPUT"
+          echo "niche=auto" >> "$GITHUB_OUTPUT"
+          echo "upload=true" >> "$GITHUB_OUTPUT"
 
       - name: Run Scheduled Pipeline
         env:
