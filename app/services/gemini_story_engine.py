@@ -304,8 +304,8 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
 
         word_count = len(script.split())
         logger.info(
-            "[GeminiStoryEngine] Generated niche=%s words=%d hook='%s...'",
-            niche, word_count, hook[:50],
+            "[GeminiStoryEngine] Generated niche=%s words=%d hook='%s...' ending='...%s'",
+            niche, word_count, hook[:50], script[-100:],
         )
 
         return hook, script
