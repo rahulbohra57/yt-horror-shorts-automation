@@ -151,13 +151,6 @@ class Pipeline:
                     except Exception as wh_err:
                         logger.warning(f"[{job_id}] Make.com webhook failed (non-fatal): {wh_err}")
 
-                if self.gdrive:
-                    try:
-                        logger.info(f"[{job_id}] Uploading to Google Drive (archive)")
-                        gdrive_url = self.gdrive.upload(video_path, f"short_{job_id}.mp4")
-                        logger.info(f"[{job_id}] GDrive URL: {gdrive_url}")
-                    except Exception as gd_err:
-                        logger.warning(f"[{job_id}] GDrive upload failed (non-fatal): {gd_err}")
 
             update_status(
                 JobStatus.DONE,
