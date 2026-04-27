@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GDRIVE_SERVICE_ACCOUNT_JSON: str = ""
     GDRIVE_FOLDER_ID: str = ""
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
 
 
 settings = Settings()

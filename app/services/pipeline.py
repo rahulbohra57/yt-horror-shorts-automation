@@ -10,6 +10,7 @@ from app.services.render_service import RenderService
 from app.services.youtube_service import YouTubeService
 from app.services.telegram_service import TelegramService
 from app.services.gdrive_service import GDriveService
+from app.services.cloudinary_service import CloudinaryService
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,15 @@ class Pipeline:
                 folder_id=settings.GDRIVE_FOLDER_ID,
             )
             if settings.GDRIVE_SERVICE_ACCOUNT_JSON and settings.GDRIVE_FOLDER_ID
+            else None
+        )
+        self.cloudinary = (
+            CloudinaryService(
+                cloud_name=settings.CLOUDINARY_CLOUD_NAME,
+                api_key=settings.CLOUDINARY_API_KEY,
+                api_secret=settings.CLOUDINARY_API_SECRET,
+            )
+            if settings.CLOUDINARY_CLOUD_NAME and settings.CLOUDINARY_API_KEY and settings.CLOUDINARY_API_SECRET
             else None
         )
 
@@ -106,6 +116,7 @@ class Pipeline:
 
             youtube_url = None
             gdrive_url = None
+            cloudinary_url = None
             if upload:
                 logger.info(f"[{job_id}] Uploading to YouTube")
                 update_status(JobStatus.UPLOADING)
@@ -113,9 +124,17 @@ class Pipeline:
                 if youtube_url:
                     await self.telegram.notify_uploaded(story["title"], youtube_url, niche)
 
+                if self.cloudinary:
+                    try:
+                        logger.info(f"[{job_id}] Uploading to Cloudinary for Instagram relay")
+                        cloudinary_url = self.cloudinary.upload(video_path, f"short_{job_id}")
+                        logger.info(f"[{job_id}] Cloudinary URL: {cloudinary_url}")
+                    except Exception as cd_err:
+                        logger.warning(f"[{job_id}] Cloudinary upload failed (non-fatal): {cd_err}")
+
                 if self.gdrive:
                     try:
-                        logger.info(f"[{job_id}] Uploading to Google Drive for Instagram relay")
+                        logger.info(f"[{job_id}] Uploading to Google Drive (archive)")
                         gdrive_url = self.gdrive.upload(video_path, f"short_{job_id}.mp4")
                         logger.info(f"[{job_id}] GDrive URL: {gdrive_url}")
                     except Exception as gd_err:
@@ -130,8 +149,8 @@ class Pipeline:
                 hook=story["hook"],
                 pexels_query=story["pexels_query"],
             )
-            logger.info(f"[{job_id}] Pipeline complete. URL={youtube_url} GDrive={gdrive_url}")
-            return {"status": "done", "youtube_url": youtube_url, "gdrive_url": gdrive_url, "title": story["title"]}
+            logger.info(f"[{job_id}] Pipeline complete. YouTube={youtube_url} Cloudinary={cloudinary_url} GDrive={gdrive_url}")
+            return {"status": "done", "youtube_url": youtube_url, "cloudinary_url": cloudinary_url, "gdrive_url": gdrive_url, "title": story["title"]}
 
         except GeminiFailedError as e:
             logger.error(f"[{job_id}] Gemini story generation failed: {e}", exc_info=True)
