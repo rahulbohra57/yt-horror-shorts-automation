@@ -231,12 +231,15 @@ class GeminiStoryEngine:
                 + "\nEvery story MUST have a completely different opening situation, character, and premise."
             )
 
-        prompt = f"""You are an expert short-form storyteller for YouTube Shorts. Generate a **high-retention 60-second story** in the genres of **Horror, Mystery, Paranormal, Thriller, Urban Legend, Psychological Fear, Supernatural, or Dark Twist**.
+        cta_options = "\n".join(f'  - "{c}"' for c in self._CTA_POOL)
+        prompt = f"""You are an expert short-form storyteller for YouTube Shorts. Generate a **high-retention story** for a ~60-second video in the genres of **Horror, Mystery, Paranormal, Thriller, Urban Legend, Psychological Fear, Supernatural, or Dark Twist**.
+
+The voiceover is read at a fast pace (+50% speed). To fill a full 60 seconds at that speed, the script body must be **150–170 words** (not counting the CTA). Do NOT write fewer words — an under-length story will leave dead air at the end.
 
 ### Requirements:
 
-* Story length: **120–155 words for the story itself**, then add the CTA as the final sentence (total 130–165 words)
-* Start with an **instant hook in first sentence** that creates curiosity/shock.
+* Story body: **150–170 words** (hook + build-up + twist)
+* Start with an **instant hook in the first sentence** that creates curiosity/shock.
 * Maintain suspense every few lines.
 * Use simple, cinematic language.
 * Include 1 main character only (unless necessary).
@@ -244,18 +247,21 @@ class GeminiStoryEngine:
 * Story should feel realistic at first, then become disturbing.
 * Build tension quickly.
 * End with an **unexpected twist ending** that shocks viewers.
-* Final line must be memorable and creepy.
+* Final story line must be memorable and creepy.
 * Avoid slow setup or unnecessary details.
-* MANDATORY ENDING: The very last sentence MUST be a CTA. Choose one: "Subscribe for more dark stories." / "Follow for daily horror shorts." / "Like and subscribe if this scared you." The story is INCOMPLETE without this final CTA sentence.
+* MANDATORY FINAL SENTENCE (CTA): After the twist, the very LAST sentence of "script" MUST be chosen from this list — pick one at random:
+{cta_options}
+  Do NOT end the script on the story. Do NOT omit this CTA. The response is rejected if the CTA is missing or if you invent a different CTA not on this list.
 * DO NOT use: ellipsis (...), em dashes (—), asterisks, or markdown formatting in the script
 * Write in plain prose — no bullet points, no headers, no special characters
 
 ### Structure:
 
 1. **Hook (0-5 sec):** shocking or mysterious opening line
-2. **Build-up (5-35 sec):** strange events escalate
-3. **Reveal (35-50 sec):** terrifying truth appears
-4. **Twist Ending (50-60 sec):** unexpected final punch
+2. **Build-up (5-40 sec):** strange events escalate
+3. **Reveal (40-55 sec):** terrifying truth appears
+4. **Twist Ending (55-60 sec):** unexpected final punch
+5. **CTA (final sentence):** chosen from the list above
 
 ### Tone:
 
@@ -271,7 +277,7 @@ Dark, suspenseful, binge-worthy, viral, cinematic.
 {avoid_block}
 
 Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw JSON object:
-{{"hook": "<opening hook sentence only>", "script": "<complete 130-170 word script including hook at the start, full story, and CTA at the end>"}}"""
+{{"hook": "<opening hook sentence only>", "script": "<complete 160-180 word script: hook → build-up → twist → CTA as the LAST sentence>"}}"""
 
 
         response = self._model.generate_content(
@@ -304,19 +310,31 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
 
         return hook, script
 
-    _CTA_KEYWORDS = ("subscribe", "follow", "like and subscribe", "daily horror", "dark stories")
-    _NICHE_CTA = {
-        "horror": "Like and subscribe for daily horror shorts.",
-        "mystery": "Like and subscribe for daily mystery shorts.",
-        "paranormal": "Like and subscribe for daily paranormal stories.",
-        "twist_endings": "Like and subscribe for daily twist endings.",
-        "psychological": "Like and subscribe for daily psychological horror.",
-        "supernatural": "Like and subscribe for daily supernatural horror.",
-        "slasher": "Like and subscribe for daily survival horror.",
-        "folk_horror": "Like and subscribe for daily folk horror.",
-    }
+    _CTA_KEYWORDS = ("subscribe", "smash like", "hit subscribe", "tap like", "drop a like", "like now", "like this video", "like if", "like before", "join the fearless")
+    _CTA_POOL = [
+        "If this scared you, smash Like before it finds you.",
+        "Subscribe now, or tonight's story becomes yours.",
+        "Like this video if your heart skipped a beat.",
+        "Dare to watch more? Hit Subscribe.",
+        "If you're still watching, you're brave enough to subscribe.",
+        "Like now before the lights go out.",
+        "Subscribe for daily nightmares in 60 seconds.",
+        "If this gave you chills, drop a Like.",
+        "Subscribe, the next horror story is already waiting.",
+        "Like if you'd never enter that house.",
+        "Only the fearless subscribe to Horror Shorts.",
+        "Tap Like if you got goosebumps.",
+        "Subscribe now, we know you'll come back anyway.",
+        "Like this video to survive the next story.",
+        "If you love twist endings, subscribe now.",
+        "Hit Subscribe before midnight.",
+        "Like if that ending shocked you.",
+        "Subscribe for horror that ends too late to sleep.",
+        "If you heard something behind you, Like now.",
+        "Join the fearless. Subscribe to Horror Shorts.",
+    ]
 
-    def _ensure_complete_story(self, script: str, niche: str) -> str:
+    def _ensure_complete_story(self, script: str, niche: str = "") -> str:  # niche kept for call-site compat
         """Guarantee the script ends with a complete sentence and a CTA."""
         script = script.strip()
 
@@ -338,10 +356,12 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
                 else:
                     script = script.rstrip() + "."
 
-        # If no CTA present, append one
-        lower = script.lower()
-        if not any(kw in lower for kw in self._CTA_KEYWORDS):
-            cta = self._NICHE_CTA.get(niche, "Like and subscribe for more dark stories.")
+        # If no CTA near the end, append one.
+        # Only check the last 120 characters so story words like "she followed him"
+        # don't produce a false-positive match.
+        tail = script[-120:].lower()
+        if not any(kw in tail for kw in self._CTA_KEYWORDS):
+            cta = random.choice(self._CTA_POOL)
             script = script + " " + cta
             logger.warning("[GeminiStoryEngine] No CTA found in script — appended: %s", cta)
 
