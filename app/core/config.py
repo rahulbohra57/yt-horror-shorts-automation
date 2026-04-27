@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     YOUTUBE_API_KEY: str = ""
     YOUTUBE_CHANNEL_HANDLE: str = ""
     GEMINI_API_KEY: str = ""
+    GDRIVE_SERVICE_ACCOUNT_JSON: str = ""
+    GDRIVE_FOLDER_ID: str = ""
 
 
 settings = Settings()

@@ -9,6 +9,7 @@ from app.services.tts_service import TTSService
 from app.services.render_service import RenderService
 from app.services.youtube_service import YouTubeService
 from app.services.telegram_service import TelegramService
+from app.services.gdrive_service import GDriveService
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,14 @@ class Pipeline:
         self.telegram = TelegramService(
             bot_token=settings.TELEGRAM_BOT_TOKEN,
             chat_id=settings.TELEGRAM_CHAT_ID,
+        )
+        self.gdrive = (
+            GDriveService(
+                service_account_json=settings.GDRIVE_SERVICE_ACCOUNT_JSON,
+                folder_id=settings.GDRIVE_FOLDER_ID,
+            )
+            if settings.GDRIVE_SERVICE_ACCOUNT_JSON and settings.GDRIVE_FOLDER_ID
+            else None
         )
 
     async def run(self, niche: str, job_id: str, session, upload: bool = True) -> dict:
@@ -96,12 +105,21 @@ class Pipeline:
             video_path = self.renderer.render(video_paths, audio_path, story["script"], job_id, word_timings=word_timings, niche=niche)
 
             youtube_url = None
+            gdrive_url = None
             if upload:
                 logger.info(f"[{job_id}] Uploading to YouTube")
                 update_status(JobStatus.UPLOADING)
                 youtube_url = self.youtube.upload(video_path, story["seo"])
                 if youtube_url:
                     await self.telegram.notify_uploaded(story["title"], youtube_url, niche)
+
+                if self.gdrive:
+                    try:
+                        logger.info(f"[{job_id}] Uploading to Google Drive for Instagram relay")
+                        gdrive_url = self.gdrive.upload(video_path, f"short_{job_id}.mp4")
+                        logger.info(f"[{job_id}] GDrive URL: {gdrive_url}")
+                    except Exception as gd_err:
+                        logger.warning(f"[{job_id}] GDrive upload failed (non-fatal): {gd_err}")
 
             update_status(
                 JobStatus.DONE,
@@ -112,8 +130,8 @@ class Pipeline:
                 hook=story["hook"],
                 pexels_query=story["pexels_query"],
             )
-            logger.info(f"[{job_id}] Pipeline complete. URL={youtube_url}")
-            return {"status": "done", "youtube_url": youtube_url, "title": story["title"]}
+            logger.info(f"[{job_id}] Pipeline complete. URL={youtube_url} GDrive={gdrive_url}")
+            return {"status": "done", "youtube_url": youtube_url, "gdrive_url": gdrive_url, "title": story["title"]}
 
         except GeminiFailedError as e:
             logger.error(f"[{job_id}] Gemini story generation failed: {e}", exc_info=True)
