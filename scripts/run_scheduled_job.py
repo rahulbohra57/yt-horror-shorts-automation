@@ -22,17 +22,29 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+ALL_NICHES = [
+    "horror", "mystery", "paranormal", "twist_endings",
+    "psychological", "supernatural", "slasher", "folk_horror",
+]
+
+
 def _pick_auto_niche(session) -> str:
-    options = ["horror", "mystery"]
-    last = (
-        session.query(Short)
-        .filter(Short.niche.in_(options))
+    """Shuffled-batch rotation: walk through all niches before repeating any."""
+    recent = (
+        session.query(Short.niche)
+        .filter(Short.niche.in_(ALL_NICHES))
         .order_by(Short.created_at.desc(), Short.id.desc())
-        .first()
+        .limit(len(ALL_NICHES))
+        .all()
     )
-    if not last:
-        return options[0]
-    return options[1] if last.niche == options[0] else options[0]
+    used = [row[0] for row in recent]
+    # Niches not yet used in the current batch
+    remaining = [n for n in ALL_NICHES if n not in used]
+    if not remaining:
+        # Full cycle complete — start a fresh shuffled batch
+        remaining = ALL_NICHES[:]
+    import random as _random
+    return _random.choice(remaining)
 
 
 def parse_args() -> argparse.Namespace:
@@ -40,8 +52,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--niche",
         default="auto",
-        choices=["auto", "horror", "mystery"],
-        help="Niche to generate. 'auto' alternates horror/mystery based on previous run.",
+        choices=["auto"] + ALL_NICHES,
+        help="Niche to generate. 'auto' rotates through all genres in shuffled batches.",
     )
     p.add_argument(
         "--upload",

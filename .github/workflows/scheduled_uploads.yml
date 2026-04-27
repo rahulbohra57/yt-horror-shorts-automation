@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       niche:
-        description: "horror, mystery, or auto"
+        description: "auto, horror, mystery, paranormal, twist_endings, psychological, supernatural, slasher, folk_horror"
         required: false
         default: "auto"
       upload:
