@@ -140,7 +140,7 @@ class RenderService:
 
         cmd = [
             "ffmpeg", "-f", "concat", "-safe", "0", "-i", str(concat_list),
-            "-t", str(audio_duration),
+            "-t", str(audio_duration + 2.0),
             "-c:v", "libx264", "-preset", "fast", "-crf", "23",
             "-pix_fmt", "yuv420p", "-r", "30",
             "-an", "-y", str(out)
@@ -180,7 +180,7 @@ class RenderService:
             ),
             "-c:v", "libx264", "-preset", "fast", "-crf", "23",
             "-c:a", "aac", "-b:a", "128k",
-            "-y", str(out)
+            "-shortest", "-y", str(out)
         ]
         self._run(cmd)
         return str(out)
@@ -414,14 +414,17 @@ class RenderService:
     def _get_caption_segments(self, script: str, audio_path: str, word_timings: list = None) -> list:
         """Returns list of (start_sec, end_sec, text) caption groups — compact word chunks."""
         clean_script = script.replace('"', '').replace('"', '').replace('"', '')
+        duration = self._get_duration(audio_path)
         if word_timings:
             chunks = self._align_words_to_caption_chunks(word_timings, clean_script)
             if chunks:
+                # Extend the last segment to cover through the end of audio
+                last = chunks[-1]
+                chunks[-1] = (last[0], max(last[1], duration - 0.05), last[2])
                 return chunks
         words = clean_script.split()
         if not words:
-            return [(0.0, self._get_duration(audio_path), clean_script)]
-        duration = self._get_duration(audio_path)
+            return [(0.0, duration, clean_script)]
         words_per_sec = max(len(words) / max(duration, 0.01), 0.5)
         segments = []
         i = 0
@@ -477,6 +480,7 @@ class RenderService:
                 break
             start = chunk[0]["offset"]
             end = chunk[-1]["offset"] + chunk[-1]["duration"]
+            end = max(end, start + 0.3)  # guarantee minimum display time
             text = " ".join(w["word"] for w in chunk)
             captions.append((start, end, text))
             i += CAPTION_WORDS_PER_SEGMENT

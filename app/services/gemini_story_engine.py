@@ -235,7 +235,7 @@ class GeminiStoryEngine:
 
 ### Requirements:
 
-* Story length: **130–170 words max** (fits under 1 minute voiceover)
+* Story length: **120–155 words for the story itself**, then add the CTA as the final sentence (total 130–165 words)
 * Start with an **instant hook in first sentence** that creates curiosity/shock.
 * Maintain suspense every few lines.
 * Use simple, cinematic language.
@@ -320,14 +320,23 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
         """Guarantee the script ends with a complete sentence and a CTA."""
         script = script.strip()
 
-        # If the script ends mid-sentence (no terminal punctuation), truncate at last complete sentence
+        # If the script ends mid-sentence (no terminal punctuation), decide how to recover.
+        # Check if a CTA keyword already appears near the end before truncating — if so, just
+        # add a period rather than wiping the CTA by cutting back to an earlier sentence.
         if script and script[-1] not in ".!?":
-            last_end = max(script.rfind("."), script.rfind("!"), script.rfind("?"))
-            if last_end > len(script) // 2:
-                script = script[: last_end + 1].strip()
-                logger.warning("[GeminiStoryEngine] Script was truncated mid-sentence — trimmed to last complete sentence")
-            else:
+            tail = script[-80:].lower()
+            cta_in_tail = any(kw in tail for kw in self._CTA_KEYWORDS)
+            if cta_in_tail:
+                # CTA is present but missing trailing period — just close it
                 script = script.rstrip() + "."
+                logger.warning("[GeminiStoryEngine] CTA present but no trailing period — added period")
+            else:
+                last_end = max(script.rfind("."), script.rfind("!"), script.rfind("?"))
+                if last_end > len(script) // 2:
+                    script = script[: last_end + 1].strip()
+                    logger.warning("[GeminiStoryEngine] Script truncated mid-sentence — trimmed to last complete sentence")
+                else:
+                    script = script.rstrip() + "."
 
         # If no CTA present, append one
         lower = script.lower()
@@ -340,10 +349,18 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
 
     def _generate_title(self, niche: str, hook: str) -> str:
         label = GENRE_LABELS.get(niche, "Horror")
+        suffix = f" #{label} #Shorts"
+        max_hook_chars = 97 - len(suffix)  # YouTube title limit is 100 chars
+
         base = hook.rstrip(".").rstrip("?").rstrip("!")
-        # Title-case without breaking apostrophes (Python's str.title() capitalises after "'")
+        # Title-case without breaking apostrophes
         titled = re.sub(r"[A-Za-z]+('[A-Za-z]+)?", lambda m: m.group(0).capitalize(), base)
-        return f"{titled} #{label} #Shorts"
+
+        # Trim to the last complete word within the character budget
+        if len(titled) > max_hook_chars:
+            titled = titled[:max_hook_chars].rsplit(" ", 1)[0].rstrip(",;:")
+
+        return f"{titled}{suffix}"
 
     def _generate_seo(self, title: str, niche: str) -> dict:
         ch = settings.CHANNEL_NAME
