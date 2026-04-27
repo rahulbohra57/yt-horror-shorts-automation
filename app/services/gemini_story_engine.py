@@ -231,14 +231,13 @@ class GeminiStoryEngine:
                 + "\nEvery story MUST have a completely different opening situation, character, and premise."
             )
 
-        cta_options = "\n".join(f'  - "{c}"' for c in self._CTA_POOL)
         prompt = f"""You are an expert short-form storyteller for YouTube Shorts. Generate a **high-retention story** for a ~60-second video in the genres of **Horror, Mystery, Paranormal, Thriller, Urban Legend, Psychological Fear, Supernatural, or Dark Twist**.
 
-The voiceover is read at a fast pace (+50% speed). To fill a full 60 seconds at that speed, the script body must be **150–170 words** (not counting the CTA). Do NOT write fewer words — an under-length story will leave dead air at the end.
+The voiceover is read at a fast pace (+50% speed). To fill a full 60 seconds at that speed the story must be **150–170 words**. Do NOT write fewer words — an under-length story leaves dead air at the end.
 
 ### Requirements:
 
-* Story body: **150–170 words** (hook + build-up + twist)
+* Length: **150–170 words** (story only — no CTA, no sign-off)
 * Start with an **instant hook in the first sentence** that creates curiosity/shock.
 * Maintain suspense every few lines.
 * Use simple, cinematic language.
@@ -247,13 +246,11 @@ The voiceover is read at a fast pace (+50% speed). To fill a full 60 seconds at 
 * Story should feel realistic at first, then become disturbing.
 * Build tension quickly.
 * End with an **unexpected twist ending** that shocks viewers.
-* Final story line must be memorable and creepy.
+* Final line must be memorable and creepy.
 * Avoid slow setup or unnecessary details.
-* MANDATORY FINAL SENTENCE (CTA): After the twist, the very LAST sentence of "script" MUST be chosen from this list — pick one at random:
-{cta_options}
-  Do NOT end the script on the story. Do NOT omit this CTA. The response is rejected if the CTA is missing or if you invent a different CTA not on this list.
-* DO NOT use: ellipsis (...), em dashes (—), asterisks, or markdown formatting in the script
-* Write in plain prose — no bullet points, no headers, no special characters
+* DO NOT include any CTA, subscribe line, or sign-off — the story ends on the twist.
+* DO NOT use: ellipsis (...), em dashes (—), asterisks, or markdown formatting in the script.
+* Write in plain prose — no bullet points, no headers, no special characters.
 
 ### Structure:
 
@@ -261,7 +258,6 @@ The voiceover is read at a fast pace (+50% speed). To fill a full 60 seconds at 
 2. **Build-up (5-40 sec):** strange events escalate
 3. **Reveal (40-55 sec):** terrifying truth appears
 4. **Twist Ending (55-60 sec):** unexpected final punch
-5. **CTA (final sentence):** chosen from the list above
 
 ### Tone:
 
@@ -277,7 +273,7 @@ Dark, suspenseful, binge-worthy, viral, cinematic.
 {avoid_block}
 
 Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw JSON object:
-{{"hook": "<opening hook sentence only>", "script": "<complete 160-180 word script: hook → build-up → twist → CTA as the LAST sentence>"}}"""
+{{"hook": "<opening hook sentence only>", "script": "<150-170 word story ending on the twist — no CTA>"}}"""
 
 
         response = self._model.generate_content(
@@ -299,13 +295,17 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
         hook = parsed["hook"].strip()
         script = parsed["script"].strip()
 
-        # Ensure story ends with a complete sentence + CTA
-        script = self._ensure_complete_story(script, niche)
+        # Ensure story body ends with a complete sentence.
+        script = self._close_incomplete_sentence(script)
+
+        # Always stitch a CTA from the pool — Gemini never writes one.
+        cta = random.choice(self._CTA_POOL)
+        script = script + " " + cta
 
         word_count = len(script.split())
         logger.info(
-            "[GeminiStoryEngine] Generated niche=%s words=%d hook='%s...' ending='...%s'",
-            niche, word_count, hook[:50], script[-100:],
+            "[GeminiStoryEngine] Generated niche=%s words=%d cta='%s' hook='%s...'",
+            niche, word_count, cta, hook[:50],
         )
 
         return hook, script
@@ -333,41 +333,16 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
         "Join the fearless. Subscribe to Horror Shorts.",
     ]
 
-    # Normalised set for exact last-sentence comparison (no punctuation, lowercase)
-    @property
-    def _cta_pool_normalized(self) -> set:
-        return {c.rstrip(".!?").lower() for c in self._CTA_POOL}
-
-    def _last_sentence(self, script: str) -> str:
-        """Return the final sentence of the script (after the second-to-last terminal punct)."""
-        end = max(script.rfind("."), script.rfind("!"), script.rfind("?"))
-        if end <= 0:
-            return script
-        prev = max(script.rfind(".", 0, end), script.rfind("!", 0, end), script.rfind("?", 0, end))
-        return script[prev + 1:].strip()
-
-    def _ensure_complete_story(self, script: str, niche: str = "") -> str:  # niche kept for call-site compat
-        """Guarantee the script ends with a complete sentence that is one of our known CTAs."""
+    def _close_incomplete_sentence(self, script: str) -> str:
+        """Trim or close a mid-sentence tail so the story body ends cleanly."""
         script = script.strip()
-
-        # Close a mid-sentence tail (no terminal punctuation) before proceeding.
         if script and script[-1] not in ".!?":
             last_end = max(script.rfind("."), script.rfind("!"), script.rfind("?"))
             if last_end > len(script) // 2:
                 script = script[: last_end + 1].strip()
-                logger.warning("[GeminiStoryEngine] Script trimmed mid-sentence to last complete sentence")
+                logger.warning("[GeminiStoryEngine] Story trimmed to last complete sentence")
             else:
                 script = script.rstrip() + "."
-
-        # Exact-match the last sentence against our CTA pool (case/punct-insensitive).
-        # Substring matching is too fragile — story words like "just like now" or
-        # "she followed him" produce false positives. Exact match is bulletproof.
-        last = self._last_sentence(script).rstrip(".!?").lower()
-        if last not in self._cta_pool_normalized:
-            cta = random.choice(self._CTA_POOL)
-            script = script + " " + cta
-            logger.warning("[GeminiStoryEngine] Last sentence not a known CTA — appended: %s", cta)
-
         return script
 
     def _generate_title(self, niche: str, hook: str) -> str:
