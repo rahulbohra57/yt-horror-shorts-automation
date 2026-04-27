@@ -310,7 +310,6 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
 
         return hook, script
 
-    _CTA_KEYWORDS = ("subscribe", "smash like", "hit subscribe", "tap like", "drop a like", "like now", "like this video", "like if", "like before", "join the fearless")
     _CTA_POOL = [
         "If this scared you, smash Like before it finds you.",
         "Subscribe now, or tonight's story becomes yours.",
@@ -334,36 +333,40 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
         "Join the fearless. Subscribe to Horror Shorts.",
     ]
 
+    # Normalised set for exact last-sentence comparison (no punctuation, lowercase)
+    @property
+    def _cta_pool_normalized(self) -> set:
+        return {c.rstrip(".!?").lower() for c in self._CTA_POOL}
+
+    def _last_sentence(self, script: str) -> str:
+        """Return the final sentence of the script (after the second-to-last terminal punct)."""
+        end = max(script.rfind("."), script.rfind("!"), script.rfind("?"))
+        if end <= 0:
+            return script
+        prev = max(script.rfind(".", 0, end), script.rfind("!", 0, end), script.rfind("?", 0, end))
+        return script[prev + 1:].strip()
+
     def _ensure_complete_story(self, script: str, niche: str = "") -> str:  # niche kept for call-site compat
-        """Guarantee the script ends with a complete sentence and a CTA."""
+        """Guarantee the script ends with a complete sentence that is one of our known CTAs."""
         script = script.strip()
 
-        # If the script ends mid-sentence (no terminal punctuation), decide how to recover.
-        # Check if a CTA keyword already appears near the end before truncating — if so, just
-        # add a period rather than wiping the CTA by cutting back to an earlier sentence.
+        # Close a mid-sentence tail (no terminal punctuation) before proceeding.
         if script and script[-1] not in ".!?":
-            tail = script[-80:].lower()
-            cta_in_tail = any(kw in tail for kw in self._CTA_KEYWORDS)
-            if cta_in_tail:
-                # CTA is present but missing trailing period — just close it
-                script = script.rstrip() + "."
-                logger.warning("[GeminiStoryEngine] CTA present but no trailing period — added period")
+            last_end = max(script.rfind("."), script.rfind("!"), script.rfind("?"))
+            if last_end > len(script) // 2:
+                script = script[: last_end + 1].strip()
+                logger.warning("[GeminiStoryEngine] Script trimmed mid-sentence to last complete sentence")
             else:
-                last_end = max(script.rfind("."), script.rfind("!"), script.rfind("?"))
-                if last_end > len(script) // 2:
-                    script = script[: last_end + 1].strip()
-                    logger.warning("[GeminiStoryEngine] Script truncated mid-sentence — trimmed to last complete sentence")
-                else:
-                    script = script.rstrip() + "."
+                script = script.rstrip() + "."
 
-        # If no CTA near the end, append one.
-        # Only check the last 120 characters so story words like "she followed him"
-        # don't produce a false-positive match.
-        tail = script[-120:].lower()
-        if not any(kw in tail for kw in self._CTA_KEYWORDS):
+        # Exact-match the last sentence against our CTA pool (case/punct-insensitive).
+        # Substring matching is too fragile — story words like "just like now" or
+        # "she followed him" produce false positives. Exact match is bulletproof.
+        last = self._last_sentence(script).rstrip(".!?").lower()
+        if last not in self._cta_pool_normalized:
             cta = random.choice(self._CTA_POOL)
             script = script + " " + cta
-            logger.warning("[GeminiStoryEngine] No CTA found in script — appended: %s", cta)
+            logger.warning("[GeminiStoryEngine] Last sentence not a known CTA — appended: %s", cta)
 
         return script
 
