@@ -419,9 +419,15 @@ class RenderService:
         if word_timings:
             chunks = self._align_words_to_caption_chunks(word_timings, clean_script)
             if chunks:
-                chunks = self._force_cta_at_end(chunks, clean_script, cta, duration)
+                # The script sent to TTS already includes the CTA appended at the end,
+                # so word_timings cover every word (story + CTA) at the correct timestamps.
+                # Just ensure the final chunk reaches the end of the audio.
+                last_s, last_e, last_t = chunks[-1]
+                chunks[-1] = (last_s, max(last_e, duration - 0.05), last_t)
                 return chunks
 
+        # Fallback: proportional segmentation (no word timings available).
+        # The full script (story + CTA) is segmented proportionally so CTA appears naturally.
         words = clean_script.split()
         if not words:
             return [(0.0, duration, clean_script)]
@@ -434,45 +440,11 @@ class RenderService:
             end = min((i + len(chunk_words)) / words_per_sec, duration)
             segments.append((start, end, " ".join(chunk_words)))
             i += CAPTION_WORDS_PER_SEGMENT
+        # Extend last segment to fill the full audio duration
+        if segments:
+            s, e, t = segments[-1]
+            segments[-1] = (s, max(e, duration - 0.05), t)
         return segments
-
-    def _force_cta_at_end(self, chunks: list, clean_script: str, cta: str, duration: float) -> list:
-        """Ensure the CTA always appears as the final subtitle chunk(s)."""
-        if not cta:
-            last = chunks[-1]
-            chunks[-1] = (last[0], max(last[1], duration - 0.05), last[2])
-            return chunks
-
-        cta_clean = cta.replace('"', '').replace('"', '').replace('"', '').strip()
-        cta_words = cta_clean.split()
-        total_words = len(clean_script.split())
-
-        # Estimate the start time of the CTA proportionally within the audio
-        story_word_count = max(total_words - len(cta_words), 1)
-        cta_start_time = (story_word_count / total_words) * duration
-
-        # Keep only story-body chunks that end before the CTA starts
-        story_chunks = [(s, e, t) for s, e, t in chunks if s < cta_start_time]
-        if not story_chunks:
-            story_chunks = chunks[:max(1, len(chunks) - len(cta_words) // CAPTION_WORDS_PER_SEGMENT)]
-
-        # Trim the last story chunk's end to cta_start_time
-        last_s, last_e, last_t = story_chunks[-1]
-        story_chunks[-1] = (last_s, min(last_e, cta_start_time), last_t)
-
-        # Force CTA as final subtitle chunk(s)
-        cta_duration = duration - cta_start_time
-        secs_per_word = cta_duration / max(len(cta_words), 1)
-        i = 0
-        while i < len(cta_words):
-            chunk_w = cta_words[i:i + CAPTION_WORDS_PER_SEGMENT]
-            s = cta_start_time + i * secs_per_word
-            e = min(cta_start_time + (i + len(chunk_w)) * secs_per_word, duration - 0.05)
-            e = max(e, s + 0.3)
-            story_chunks.append((s, e, " ".join(chunk_w)))
-            i += CAPTION_WORDS_PER_SEGMENT
-
-        return story_chunks
 
     @staticmethod
     def _align_words_to_caption_chunks(word_timings: list, script: str = "") -> list:
