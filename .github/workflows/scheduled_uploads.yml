@@ -2,10 +2,37 @@ name: Scheduled Shorts Upload
 
 on:
   schedule:
-    - cron: '10 0 * * *'
-    - cron: '10 6 * * *'
-    - cron: '10 12 * * *'
-    - cron: '10 18 * * *'
+    # Avoid the busiest :00/:10 cron windows, where GitHub scheduled jobs can
+    # be heavily delayed or cancelled before a runner is assigned.
+    - cron: '23 0 * * *'
+    - cron: '23 6 * * *'
+    - cron: '23 12 * * *'
+    - cron: '23 18 * * *'
+  workflow_dispatch:
+    inputs:
+      niche:
+        description: "Niche to generate"
+        required: false
+        default: "auto"
+        type: choice
+        options:
+          - auto
+          - horror
+          - mystery
+          - paranormal
+          - twist_endings
+          - psychological
+          - supernatural
+          - slasher
+          - folk_horror
+      upload:
+        description: "Upload to YouTube"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
 
 jobs:
   generate_and_upload:
@@ -45,8 +72,17 @@ jobs:
         id: resolve
         shell: bash
         run: |
-          echo "niche=auto" >> "$GITHUB_OUTPUT"
-          echo "upload=true" >> "$GITHUB_OUTPUT"
+          echo "niche=${{ github.event.inputs.niche || 'auto' }}" >> "$GITHUB_OUTPUT"
+          echo "upload=${{ github.event.inputs.upload || 'true' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Debug Run Context
+        run: |
+          echo "event=${{ github.event_name }}"
+          echo "sha=${{ github.sha }}"
+          echo "niche=${{ steps.resolve.outputs.niche }}"
+          echo "upload=${{ steps.resolve.outputs.upload }}"
+          python --version
+          ffmpeg -version | head -n 1
 
       - name: Run Scheduled Pipeline
         env:
@@ -71,15 +107,28 @@ jobs:
           ALLOW_GTTS_FALLBACK: "true"
         run: |
           set -euo pipefail
+          mkdir -p .data
           if [ -z "${PEXELS_API_KEY}" ] || [ -z "${YOUTUBE_CLIENT_ID}" ] || [ -z "${YOUTUBE_CLIENT_SECRET}" ] || [ -z "${YOUTUBE_REFRESH_TOKEN}" ] || [ -z "${GEMINI_API_KEY}" ]; then
             echo "Required secrets are missing"
             exit 1
           fi
 
-          mkdir -p .data
           python scripts/run_scheduled_job.py \
             --niche "${{ steps.resolve.outputs.niche }}" \
-            --upload "${{ steps.resolve.outputs.upload }}"
+            --upload "${{ steps.resolve.outputs.upload }}" \
+            2>&1 | tee .data/scheduled_pipeline.log
+
+      - name: Upload Diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scheduled-pipeline-diagnostics-${{ github.run_id }}
+          path: |
+            .data/scheduled_pipeline.log
+            .data/shorts.db
+            /tmp/shorts_output/*.mp4
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Save Story History Cache
         if: always()
