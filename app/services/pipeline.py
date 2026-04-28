@@ -35,14 +35,15 @@ class Pipeline:
             bot_token=settings.TELEGRAM_BOT_TOKEN,
             chat_id=settings.TELEGRAM_CHAT_ID,
         )
-        self.gdrive = (
-            GDriveService(
-                service_account_json=settings.GDRIVE_SERVICE_ACCOUNT_JSON,
-                folder_id=settings.GDRIVE_FOLDER_ID,
-            )
-            if settings.GDRIVE_SERVICE_ACCOUNT_JSON and settings.GDRIVE_FOLDER_ID
-            else None
-        )
+        self.gdrive = None
+        if settings.GDRIVE_SERVICE_ACCOUNT_JSON and settings.GDRIVE_FOLDER_ID:
+            try:
+                self.gdrive = GDriveService(
+                    service_account_json=settings.GDRIVE_SERVICE_ACCOUNT_JSON,
+                    folder_id=settings.GDRIVE_FOLDER_ID,
+                )
+            except Exception as gdrive_init_err:
+                logger.warning(f"GDriveService init failed (non-fatal): {gdrive_init_err}")
         self.cloudinary = (
             CloudinaryService(
                 cloud_name=settings.CLOUDINARY_CLOUD_NAME,
