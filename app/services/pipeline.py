@@ -90,6 +90,7 @@ class Pipeline:
                 logger.warning(f"[{job_id}] Failed to load recent scripts: {history_err}")
 
             story = self.story.generate(niche, recent_scripts=recent_scripts)
+            story = self._ensure_cta_in_script(story)
 
             logger.info(f"[{job_id}] Generating TTS")
             audio_path, word_timings = await self.tts.generate(story["script"])
@@ -175,3 +176,13 @@ class Pipeline:
             update_status(JobStatus.FAILED, error_message=str(e)[:1000])
             await self.telegram.notify_failed(job_id, niche, str(e))
             return {"status": "failed", "error": str(e)}
+
+    @staticmethod
+    def _ensure_cta_in_script(story: dict) -> dict:
+        """Guarantee the CTA is part of the script before TTS and captions run."""
+        script = (story.get("script") or "").strip()
+        cta = (story.get("cta") or "").strip()
+        if cta and cta not in script:
+            logger.warning("CTA missing from generated script; appending before TTS")
+            story = {**story, "script": f"{script} {cta}".strip()}
+        return story

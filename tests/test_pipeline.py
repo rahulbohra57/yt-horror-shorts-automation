@@ -12,7 +12,8 @@ def test_pipeline_update_status_on_failure():
     from app.services.pipeline import Pipeline
     from app.core.models import JobStatus
 
-    with patch("app.services.pipeline.StoryEngine") as MockStory, \
+    with patch("app.services.pipeline.settings.GEMINI_API_KEY", "test-key"), \
+         patch("app.services.pipeline.GeminiStoryEngine") as MockStory, \
          patch("app.services.pipeline.PexelsService"), \
          patch("app.services.pipeline.TTSService"), \
          patch("app.services.pipeline.RenderService"), \

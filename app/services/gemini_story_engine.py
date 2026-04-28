@@ -192,9 +192,9 @@ class GeminiStoryEngine:
         pexels_queries = niche_data.get("pexels_queries", ["dark horror scene", "night horror", "scary dark"])
         pexels_query = random.choice(pexels_queries)
 
-        hook, script, cta = self._generate_with_fallback(niche, recent)
+        hook, script, cta, title_seed = self._generate_with_fallback(niche, recent)
 
-        title = self._generate_title(niche, hook)
+        title = self._generate_title(niche, hook, title_seed)
         return {
             "niche": niche,
             "hook": hook,
@@ -206,7 +206,7 @@ class GeminiStoryEngine:
             "seo": self._generate_seo(title, niche),
         }
 
-    def _generate_with_fallback(self, niche: str, recent: list[str]) -> tuple[str, str, str]:
+    def _generate_with_fallback(self, niche: str, recent: list[str]) -> tuple[str, str, str, str]:
         try:
             return self._call_gemini(niche, recent)
         except Exception as e:
@@ -216,7 +216,7 @@ class GeminiStoryEngine:
             )
             raise GeminiFailedError(f"{type(e).__name__}: {str(e)[:300]}") from e
 
-    def _call_gemini(self, niche: str, recent_scripts: list[str]) -> tuple[str, str, str]:
+    def _call_gemini(self, niche: str, recent_scripts: list[str]) -> tuple[str, str, str, str]:
         # Summarize recent story openings so Gemini actively avoids them
         recent_openings = []
         for s in recent_scripts[:15]:
@@ -238,7 +238,8 @@ The voiceover is read at a fast pace (+50% speed). To fill a full 60 seconds at 
 ### Requirements:
 
 * Length: **150–170 words** (story only — no CTA, no sign-off)
-* Start with an **instant hook in the first sentence** that creates curiosity/shock.
+* Start the script with the exact hook sentence. The first 10 seconds must be impossible to ignore.
+* In the first 35 words, include one disturbing question, impossible discovery, or immediate danger.
 * Maintain suspense every few lines.
 * Use simple, cinematic language.
 * Include 1 main character only (unless necessary).
@@ -247,7 +248,9 @@ The voiceover is read at a fast pace (+50% speed). To fill a full 60 seconds at 
 * Build tension quickly.
 * End with an **unexpected twist ending** that shocks viewers.
 * Final line must be memorable and creepy.
-* Avoid slow setup or unnecessary details.
+* Avoid slow setup, backstory, or unnecessary details.
+* Create a clickable YouTube Shorts title under 58 characters. It must feel complete, specific, and curiosity-driven.
+* The title must NOT include hashtags, markdown, quotes, ellipsis, or trailing incomplete phrases.
 * DO NOT include any CTA, subscribe line, or sign-off — the story ends on the twist.
 * DO NOT use: ellipsis (...), em dashes (—), asterisks, or markdown formatting in the script.
 * Write in plain prose — no bullet points, no headers, no special characters.
@@ -273,7 +276,7 @@ Dark, suspenseful, binge-worthy, viral, cinematic.
 {avoid_block}
 
 Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw JSON object:
-{{"hook": "<opening hook sentence only>", "script": "<150-170 word story ending on the twist — no CTA>"}}"""
+{{"hook": "<opening hook sentence only>", "title": "<catchy complete title under 58 characters, no hashtags>", "script": "<150-170 word story starting with the exact hook and ending on the twist — no CTA>"}}"""
 
 
         response = self._model.generate_content(
@@ -293,14 +296,17 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
 
         parsed = json.loads(text)
         hook = parsed["hook"].strip()
+        title_seed = parsed.get("title", "").strip()
         script = parsed["script"].strip()
+        script = self._ensure_hook_starts_script(script, hook)
 
         # Ensure story body ends with a complete sentence.
         script = self._close_incomplete_sentence(script)
 
-        # Always stitch a CTA from the pool — Gemini never writes one.
-        cta = random.choice(self._CTA_POOL)
-        script = script + " " + cta
+        # Always stitch a CTA from our controlled pool. Prefer niche-specific
+        # template CTAs so production can be tuned without changing code.
+        cta = random.choice(self._cta_pool_for(niche))
+        script = self._append_cta(script, cta)
 
         word_count = len(script.split())
         logger.info(
@@ -308,7 +314,7 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
             niche, word_count, cta, hook[:50],
         )
 
-        return hook, script, cta
+        return hook, script, cta, title_seed
 
     _CTA_POOL = [
         "If this scared you, smash Like before it finds you.",
@@ -333,6 +339,35 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
         "Join the fearless. Subscribe to Horror Shorts.",
     ]
 
+    def _cta_pool_for(self, niche: str) -> list[str]:
+        niche_ctas = self._niches.get(niche, {}).get("ctas", [])
+        clean_ctas = [cta.strip() for cta in niche_ctas if isinstance(cta, str) and cta.strip()]
+        return clean_ctas or self._CTA_POOL
+
+    def _append_cta(self, script: str, cta: str) -> str:
+        script = script.strip()
+        cta = cta.strip()
+        if not cta:
+            return script
+        if cta in script:
+            return script
+        return f"{script} {cta}".strip()
+
+    def _ensure_hook_starts_script(self, script: str, hook: str) -> str:
+        script = script.strip()
+        hook = hook.strip()
+        if not hook:
+            return script
+
+        def normalize(text: str) -> str:
+            return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+        hook_words = normalize(hook).split()
+        script_opening = " ".join(normalize(script).split()[:len(hook_words)])
+        if hook_words and script_opening == " ".join(hook_words):
+            return script
+        return f"{hook} {script}".strip()
+
     def _close_incomplete_sentence(self, script: str) -> str:
         """Trim or close a mid-sentence tail so the story body ends cleanly."""
         script = script.strip()
@@ -345,20 +380,30 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
                 script = script.rstrip() + "."
         return script
 
-    def _generate_title(self, niche: str, hook: str) -> str:
-        label = GENRE_LABELS.get(niche, "Horror")
-        suffix = f" #{label} #Shorts"
-        max_hook_chars = 97 - len(suffix)  # YouTube title limit is 100 chars
+    def _generate_title(self, niche: str, hook: str, title_seed: str = "") -> str:
+        title = self._clean_title(title_seed) or self._clean_title(hook)
+        if not title:
+            title = "This Ending Will Haunt You"
 
-        base = hook.rstrip(".").rstrip("?").rstrip("!")
-        # Title-case without breaking apostrophes
-        titled = re.sub(r"[A-Za-z]+('[A-Za-z]+)?", lambda m: m.group(0).capitalize(), base)
+        suffix = " #Shorts"
+        max_title_chars = 100 - len(suffix)
+        if len(title) > max_title_chars:
+            title = title[:max_title_chars].rsplit(" ", 1)[0].rstrip(",;:!?")
+        if len(title) > 62:
+            title = title[:62].rsplit(" ", 1)[0].rstrip(",;:!?")
+        return f"{title}{suffix}"
 
-        # Trim to the last complete word within the character budget
-        if len(titled) > max_hook_chars:
-            titled = titled[:max_hook_chars].rsplit(" ", 1)[0].rstrip(",;:")
-
-        return f"{titled}{suffix}"
+    def _clean_title(self, title: str) -> str:
+        title = re.sub(r"#\w+", "", title or "")
+        title = re.sub(r"[\"'`*_]+", "", title)
+        title = title.replace("...", " ")
+        title = title.replace("—", " ").replace("–", " ")
+        title = re.sub(r"\s+", " ", title).strip(" .,:;-")
+        if not title:
+            return ""
+        # Keep titles punchy without turning hashtags into broken multi-word tags.
+        title = re.sub(r"[A-Za-z]+('[A-Za-z]+)?", lambda m: m.group(0).capitalize(), title)
+        return title
 
     def _generate_seo(self, title: str, niche: str) -> dict:
         ch = settings.CHANNEL_NAME
