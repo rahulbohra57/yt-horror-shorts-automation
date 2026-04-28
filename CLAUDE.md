@@ -1,140 +1,257 @@
 # CLAUDE.md
 
-## Project: Free YouTube Shorts Story Automation Platform
+## Project: YouTube Horror Shorts Automation
 
-### Objective
-Build a **100% free**, end-to-end automation platform that creates and uploads viral-style YouTube Shorts based on short story series with strong hooks, emotional payoff, and retention-focused pacing.
+### Current Objective
+Build and operate an automated YouTube Shorts pipeline for faceless horror/mystery storytelling. The current production flow generates a retention-focused story, creates voiceover, fetches matching stock video, renders a vertical short with captions and background music, uploads to YouTube, and stores job metadata.
 
-Deployment target: **Render.com free tier**  
-Media sources: **Pexels free stock videos/images only**  
-Primary use case: Automated faceless Shorts channel growth.
-
----
-
-## Core Product Requirements
-
-### Functional Flow
-1. User selects story niche/category:
-   - Moral stories
-   - Mystery stories
-   - Horror micro stories
-   - Motivation stories
-   - Relationship drama
-   - Historical facts with twist
-   - AI generated fictional episodes
-
-2. System automatically:
-   - Generates story ideas in episodic series format
-   - Writes script with **unexpected opening hook**
-   - Splits scenes by timestamp
-   - Fetches matching Pexels media
-   - Generates AI voiceover (free TTS)
-   - Adds subtitles/captions
-   - Adds music/SFX (royalty free)
-   - Renders vertical 9:16 Short
-   - Generates SEO title, description, hashtags
-   - Uploads to YouTube automatically
-   - Stores analytics logs
+Primary channel: `HorrorShorts57`  
+Primary runtime: Python FastAPI service plus scheduled/manual pipeline jobs  
+Deployment target: Render.com or GitHub Actions/manual runner  
+Current production story engine: Gemini via `GeminiStoryEngine`
 
 ---
 
-## Virality Framework
+## Current Functional Flow
 
-### Hook Formula (first 2 seconds mandatory)
-Use one of:
-- “He opened the door... and froze.”
-- “Nobody believed her until this happened.”
-- “For 10 years, he hid one secret.”
-- “This message arrived after she died.”
-- “The last customer changed everything.”
-
-### Retention Rules
-- Sentence every 1–2 seconds
-- Pattern interrupts every 5 seconds
-- Curiosity gap maintained till final reveal
-- Final twist or lesson
-- Max duration: 20–35 seconds ideal
-
----
-
-## Tech Stack (Free Only)
-
-### Backend
-- Python 3.11
-- FastAPI
-
-### Video Processing
-- MoviePy
-- FFmpeg
-
-### AI / Text
-- Local templates + optional Ollama local LLM support
-- No paid APIs required
-
-### TTS
-Use free options:
-- edge-tts
-- gTTS fallback
-
-### Media
-- Pexels API
-
-### Upload
-- YouTube Data API v3
-
-### Database
-- SQLite
-
-### Scheduler
-- APScheduler / cron
-
-### Hosting
-- Render.com free web service
+1. A job is created with a niche.
+2. `Pipeline.run()` loads recent scripts for that niche from SQLite to reduce repetition.
+3. `GeminiStoryEngine` generates:
+   - opening hook
+   - full 150-170 word story body
+   - short clickable title seed
+   - niche-aware SEO metadata
+4. The engine appends a CTA from the controlled CTA pool.
+5. The pipeline defensively verifies the CTA is included in the exact script sent to TTS.
+6. `TTSService` generates voiceover and word timings with `edge-tts`.
+7. `PexelsService` searches/downloads multiple video clips and uses cached assets when possible.
+8. `RenderService` merges/crops clips to 1080x1920, adds captions, mixes background music, normalizes loudness, and writes an MP4.
+9. `YouTubeService` uploads the rendered MP4 with title, description, tags, category, and Shorts metadata.
+10. Optional integrations notify Telegram, upload Cloudinary for Instagram relay, and optionally use GDrive if configured correctly.
 
 ---
 
-## Render Constraints
-- Must support sleeping dyno/restart
-- Use persistent disk if available
-- Jobs must be resumable
-- Store temp files in /tmp then cleanup
-- Keep RAM under free-tier limits
+## Active Niches
+
+Production niches live in `app/templates/niches.json` and are used by Gemini for Pexels query pools and niche CTA pools.
+
+Current active schedule-friendly niches:
+- `horror`
+- `mystery`
+- `paranormal`
+- `twist_endings`
+- `psychological`
+- `supernatural`
+- `slasher`
+- `folk_horror`
+
+Legacy `StoryEngine` and older tests may still reference older niches such as moral/motivation/relationship, but the current runtime pipeline requires `GEMINI_API_KEY` and uses `GeminiStoryEngine`.
 
 ---
 
-## Required Pages
+## Retention And Story Rules
 
-### Dashboard
-- Start generation
-- Upload queue
-- Video history
-- Channel analytics
-- API key settings
+### First 10 Seconds
+The first 10 seconds are critical. Gemini is instructed to:
+- start the script with the exact hook sentence
+- make the first 35 words contain immediate danger, a disturbing question, or an impossible discovery
+- avoid slow setup, backstory, and filler
 
-### Templates
-- Story prompts
-- Hook presets
-- Caption styles
-- Niche packs
+The code also enforces this with `_ensure_hook_starts_script()` so the spoken script starts with the hook even if Gemini drifts.
+
+### Story Length
+- Target story body: 150-170 words before CTA
+- TTS rate: `+50%`
+- The final script includes story plus CTA
+- If Gemini ends mid-sentence, `_close_incomplete_sentence()` trims or completes the ending
+
+### CTA Rules
+- Gemini must not write CTAs directly.
+- CTAs are selected by code after story generation.
+- `GeminiStoryEngine._cta_pool_for(niche)` prefers niche-specific `ctas` from `app/templates/niches.json`.
+- If a niche has no CTA pool, it falls back to the built-in `_CTA_POOL`.
+- `Pipeline._ensure_cta_in_script()` is the final guard before TTS and rendering.
 
 ---
 
-## Folder Structure
+## Title, Hashtag, And SEO Rules
+
+### Title Rules
+Titles should be short, complete, and clickable.
+
+Current behavior:
+- Gemini returns a separate `title` field under 58 characters.
+- `_generate_title()` sanitizes it and appends only `#Shorts`.
+- Titles are capped under YouTube's 100-character limit.
+- Titles should not be built by truncating long hook text.
+- Titles should not contain broken multi-word genre hashtags like `#Psychological Horror`.
+
+Good example:
+```txt
+The Attic Locket Had A Heartbeat #Shorts
+```
+
+Bad examples:
+```txt
+The Antique Locket I Found In The Attic Had A Perfect, Tiny #Psychological Horror #Shorts
+The Door Opened And I Saw My Own Body Lying Beside The... #Shorts
+```
+
+### Description And Hashtags
+SEO description comes from `SEO_CONFIGS` in `app/services/gemini_story_engine.py`.
+
+Rules:
+- Keep title at the top of the description.
+- Keep hashtags as valid single tokens.
+- Use lowercase compact hashtags in descriptions, such as `#psychologicalhorror`, not broken phrases.
+- Include a channel CTA line with `@HorrorShorts57` or configured `CHANNEL_NAME`.
+- Tags sent to YouTube are plain tag strings in `seo["tags"]`.
+
+---
+
+## Key Modules
+
+### `app/services/pipeline.py`
+Orchestrates the full job.
+
+Responsibilities:
+- create/update job status
+- load recent scripts for novelty
+- generate story metadata
+- enforce CTA presence before TTS
+- generate TTS
+- fetch Pexels clips
+- render video
+- upload to YouTube if requested
+- notify Telegram and optional services
+
+Important guard:
+```py
+Pipeline._ensure_cta_in_script(story)
+```
+
+### `app/services/gemini_story_engine.py`
+Current production story engine.
+
+Responsibilities:
+- Gemini prompt construction
+- recent-opening avoidance
+- JSON parsing from Gemini
+- hook-start enforcement
+- title sanitization
+- CTA selection from niche pool
+- SEO description and tags
+
+Important methods:
+- `_call_gemini()`
+- `_ensure_hook_starts_script()`
+- `_cta_pool_for()`
+- `_append_cta()`
+- `_generate_title()`
+- `_generate_seo()`
+
+### `app/services/story_engine.py`
+Legacy template engine.
+
+Keep it working for older tests and possible fallback experiments, but it is not the current runtime path in `Pipeline`.
+
+### `app/services/tts_service.py`
+Voiceover generation.
+
+Current behavior:
+- primary provider: `edge-tts`
+- default voice: `en-US-GuyNeural`
+- default rate: `+50%`
+- returns `(audio_path, word_timings)`
+- caches MP3 and JSON timing files by hash
+- gTTS fallback only if `ALLOW_GTTS_FALLBACK` is enabled
+
+### `app/services/pexels_service.py`
+Searches and downloads free stock videos.
+
+Current behavior:
+- uses Pexels API
+- prefers portrait-friendly videos when available
+- caches downloads in `MEDIA_CACHE_DIR`
+- removes partial files on failed downloads
+
+### `app/services/render_service.py`
+Renders final vertical video.
+
+Current behavior:
+- target: 1080x1920, 30fps
+- merges multiple Pexels clips to match audio duration
+- crops/scales to vertical 9:16
+- adds captions from word timings when available
+- uses subtitle/libass path when available, with Pillow overlay fallback
+- mixes background music from `background_audio/Horror` or `background_audio/Mystery`
+- normalizes loudness to approximately `-16 LUFS`
+
+CTA/caption note:
+- TTS receives the full script including CTA.
+- Captions are generated from the same full script and word timings, so CTA should be spoken and captioned.
+
+### `app/services/youtube_service.py`
+Uploads rendered MP4 to YouTube.
+
+Current behavior:
+- OAuth refresh-token based YouTube upload
+- privacy default: `public`
+- category: Entertainment (`22`)
+- title truncation hard cap: 100 characters
+- resumable upload with progress logging and retries
+
+### `app/services/scheduler.py`
+Daily scheduler using APScheduler.
+
+Current behavior:
+- controlled by `SCHEDULER_ENABLED`
+- scheduled times from `SCHEDULE_TIMES`
+- timezone from `SCHEDULE_TIMEZONE`
+- niches from `SCHEDULE_NICHES`
+- upload behavior from `SCHEDULE_UPLOAD`
+
+---
+
+## Repository Structure
 
 ```txt
-/app
-  /api
-  /core
-  /services
+app/
+  api/
+    routes.py
+    deps.py
+  core/
+    config.py
+    database.py
+    models.py
+  services/
+    pipeline.py
+    gemini_story_engine.py
     story_engine.py
     pexels_service.py
     tts_service.py
     render_service.py
     youtube_service.py
-  /templates
-  /static
-  /db
+    scheduler.py
+    telegram_service.py
+    cloudinary_service.py
+    gdrive_service.py
+  templates/
+    niches.json
+    hooks.json
+    captions.json
+  static/
+    index.html
+background_audio/
+  Horror/
+  Mystery/
+scripts/
+  run_scheduled_job.py
+  telegram_commands.py
+  telegram_poll.py
+tests/
 main.py
+_run_pipeline.py
 requirements.txt
 render.yaml
 CLAUDE.md
@@ -142,134 +259,178 @@ CLAUDE.md
 
 ---
 
-## Key Modules
+## Environment Variables
 
-### story_engine.py
-Generate:
-- titles
-- episodic scripts
-- twists
-- hooks
-- CTA lines
-
-### pexels_service.py
-Search and download:
-- portrait videos first
-- fallback landscape crop center
-- cache assets
-
-### render_service.py
-Combine:
-- clips
-- zoom motion
-- subtitles
-- transitions
-- voiceover
-- music
-
-### youtube_service.py
-Upload:
-- title
-- description
-- tags
-- Shorts visibility settings
-- scheduled posting
-
----
-
-## SEO Rules
-
-### Title Formula
-`She Found a Locked Box After 20 Years... #shorts`
-
-### Description
-- 2 keyword lines
-- 1 curiosity line
-- CTA subscribe line
-
-### Tags
-#shorts #story #viral #moralstory #ytshorts
-
----
-
-## Automation Modes
-
-### Fully Auto
-Generate + render + upload daily.
-
-### Semi Auto
-Generate drafts for approval.
-
-### Bulk Mode
-Create 7 Shorts in one run.
-
----
-
-## Quality Rules
-
-- Captions always readable
-- No black bars
-- 1080x1920 output
-- Loudness normalized
-- First frame visually strong
-- No copyrighted assets
-
----
-
-## Free API Keys Needed
-
-Environment variables:
+Core required variables:
 
 ```env
+GEMINI_API_KEY=
 PEXELS_API_KEY=
 YOUTUBE_CLIENT_ID=
 YOUTUBE_CLIENT_SECRET=
 YOUTUBE_REFRESH_TOKEN=
-CHANNEL_NAME=
+CHANNEL_NAME=HorrorShorts57
+DB_PATH=app/db/shorts.db
+MEDIA_CACHE_DIR=/tmp/pexels_cache
+OUTPUT_DIR=/tmp/shorts_output
 ```
+
+Scheduler variables:
+
+```env
+SCHEDULER_ENABLED=false
+SCHEDULE_TIMES=00:10,06:10,12:10,18:10
+SCHEDULE_TIMEZONE=Asia/Kolkata
+SCHEDULE_UPLOAD=true
+SCHEDULE_NICHES=horror,mystery,paranormal,twist_endings,psychological,supernatural,slasher,folk_horror
+SCHEDULE_MISFIRE_GRACE_SECONDS=3600
+```
+
+Optional integrations:
+
+```env
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+APP_URL=
+YOUTUBE_API_KEY=
+YOUTUBE_CHANNEL_HANDLE=
+GDRIVE_SERVICE_ACCOUNT_JSON=
+GDRIVE_FOLDER_ID=
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
+MAKE_WEBHOOK_URL=
+ALLOW_GTTS_FALLBACK=false
+```
+
+Operational note:
+- Multiline JSON in `.env`, especially `GDRIVE_SERVICE_ACCOUNT_JSON`, can produce `python-dotenv` parse warnings if not escaped/quoted correctly. GDrive failures are currently non-fatal, but clean this up before relying on GDrive uploads.
+
+---
+
+## Local Commands
+
+### Run Tests
+Focused current-path suite:
+
+```bash
+pytest tests/test_gemini_story_engine.py tests/test_render_service.py tests/test_pipeline.py tests/test_youtube_service.py -q
+```
+
+Broader suite:
+
+```bash
+pytest -q
+```
+
+### Run One Full Pipeline Locally
+Upload to YouTube:
+
+```bash
+python _run_pipeline.py horror true
+```
+
+Generate/render without YouTube upload:
+
+```bash
+python _run_pipeline.py horror false
+```
+
+### Run Scheduled Job Script
+
+```bash
+python scripts/run_scheduled_job.py --niche horror --upload true
+```
+
+### Start API Locally
+
+```bash
+uvicorn main:app --reload
+```
+
+---
+
+## Recent Verified Behavior
+
+A full manual pipeline run successfully completed with upload enabled.
+
+Example result from job `39`:
+- local video: `/tmp/shorts_output/39.mp4`
+- YouTube URL: `https://youtube.com/shorts/uG_QUZeahFs`
+- CTA included in saved script and generated before TTS
+- CTA used: `Share this with someone brave enough to watch it alone tonight. New horror drops every single day.`
+
+Latest deployed commit at time of this update:
+
+```txt
+ac4e360 Improve shorts CTA and metadata generation
+```
+
+---
+
+## Deployment Workflow
+
+Before pushing:
+
+```bash
+pytest tests/test_gemini_story_engine.py tests/test_render_service.py tests/test_pipeline.py tests/test_youtube_service.py -q
+```
+
+Commit and push:
+
+```bash
+git add <changed-files>
+git commit -m "Short descriptive message"
+git push origin main
+```
+
+Current remote:
+
+```txt
+origin https://github.com/rahulbohra57/yt-horror-shorts-automation.git
+```
+
+Do not commit secrets, `.env`, generated videos, TTS cache files, or downloaded Pexels cache files.
+
+---
+
+## Quality Checklist For Every Generated Short
+
+- CTA is included in `story["script"]` before TTS.
+- CTA is spoken and captioned at the end.
+- Title is complete, catchy, and under 100 characters.
+- Title only includes `#Shorts`, not broken genre hashtags.
+- Description hashtags are valid compact tokens.
+- First caption starts with the hook, not mid-story setup.
+- First 10 seconds contain immediate danger, mystery, or an impossible discovery.
+- Output is 1080x1920 with no black bars.
+- Captions are readable and synced.
+- Background music is low enough not to overpower narration.
+- YouTube upload returns a Shorts URL.
+
+---
+
+## Coding Instructions For Future Agents
+
+1. Treat `GeminiStoryEngine` as the production story path unless the user explicitly asks for legacy template behavior.
+2. Keep services independently testable.
+3. Preserve the CTA guard in both story generation and pipeline orchestration.
+4. Do not let Gemini write CTAs directly; choose CTAs in code from controlled pools.
+5. Keep title generation separate from hook generation.
+6. Never add broken multi-word hashtags to titles.
+7. Update or add tests when changing story generation, metadata, TTS, rendering, or upload behavior.
+8. Avoid destructive git commands.
+9. Do not commit `.env`, media cache, rendered MP4s, generated TTS files, or private credentials.
+10. Prefer `rg` for code search and focused pytest commands for verification.
 
 ---
 
 ## Future Enhancements
 
-- Multi-language Shorts
-- Hindi voiceover mode
-- Auto comments reply
-- A/B title testing
-- Analytics driven regeneration
-- Telegram alerts
-
----
-
-## Claude Coding Instructions
-
-When generating code for this project:
-
-1. Prefer modular Python architecture.
-2. Keep all services independently testable.
-3. Never use paid APIs unless optional.
-4. Handle Render free-tier memory carefully.
-5. Use async where useful.
-6. Provide `.env.example`.
-7. Add detailed logging.
-8. Include retry logic for Pexels and YouTube upload.
-9. Optimize render speed.
-10. Keep setup beginner friendly.
-
----
-
-## First Build Priority
-
-1. FastAPI dashboard
-2. Story generator
-3. Pexels fetcher
-4. TTS
-5. FFmpeg vertical renderer
-6. YouTube uploader
-7. Daily scheduler
-
----
-
-## Success Metric
-
-Create 1 automated Short/day at zero recurring cost.
+- Fix `.env` handling for `GDRIVE_SERVICE_ACCOUNT_JSON`.
+- Add automated post-upload metadata verification.
+- Add A/B title generation and analytics feedback.
+- Add safer profanity/copyright checks before upload.
+- Add multi-language voiceover modes.
+- Add Instagram relay via Cloudinary/Make.com hardening.
+- Add stronger thumbnail/first-frame selection for Shorts preview.
