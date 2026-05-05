@@ -48,3 +48,33 @@ class Analytics(Base):
     likes = Column(Integer, default=0)
     comments = Column(Integer, default=0)
     fetched_at = Column(DateTime, default=_utcnow)
+
+
+class SeriesStatus(str, enum.Enum):
+    ACTIVE = "active"
+    COMPLETED = "completed"
+
+
+class StorySeries(Base):
+    __tablename__ = "story_series"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(160), nullable=False)
+    niche = Column(String(64), nullable=False)
+    title_prefix = Column(String(180), nullable=False)
+    playlist_name = Column(String(180), nullable=False)
+    playlist_id = Column(String(128))
+    status = Column(SAEnum(SeriesStatus), default=SeriesStatus.ACTIVE, nullable=False, index=True)
+    planned_episodes = Column(Integer, nullable=False)
+    started_at = Column(DateTime, default=_utcnow, nullable=False, index=True)
+    completed_at = Column(DateTime)
+
+
+class SeriesEpisode(Base):
+    __tablename__ = "series_episodes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    series_id = Column(Integer, ForeignKey("story_series.id", ondelete="CASCADE"), nullable=False, index=True)
+    short_id = Column(Integer, ForeignKey("shorts.id", ondelete="CASCADE"), nullable=False, index=True, unique=True)
+    episode_number = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=_utcnow, nullable=False, index=True)

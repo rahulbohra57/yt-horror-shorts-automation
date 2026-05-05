@@ -61,6 +61,12 @@ def parse_args() -> argparse.Namespace:
         choices=["true", "false"],
         help="Upload to YouTube when true.",
     )
+    p.add_argument(
+        "--mode",
+        default="story",
+        choices=["story", "series"],
+        help="Content mode: 'story' for regular shorts, 'series' for continuity episodes.",
+    )
     return p.parse_args()
 
 
@@ -79,9 +85,26 @@ def main() -> int:
         session.commit()
         session.refresh(short)
 
-        logger.info("Starting scheduled pipeline: niche=%s short_id=%s upload=%s", niche, short.id, upload)
-        result = asyncio.run(Pipeline().run(niche=niche, job_id=str(short.id), session=session, upload=upload))
-        print(json.dumps({"short_id": short.id, "niche": niche, "result": result}, ensure_ascii=True))
+        is_series = args.mode == "series"
+        logger.info(
+            "Starting scheduled pipeline: niche=%s short_id=%s upload=%s mode=%s",
+            niche, short.id, upload, args.mode,
+        )
+        result = asyncio.run(
+            Pipeline().run(
+                niche=niche,
+                job_id=str(short.id),
+                session=session,
+                upload=upload,
+                series_mode=is_series,
+            )
+        )
+        print(
+            json.dumps(
+                {"short_id": short.id, "niche": niche, "mode": args.mode, "result": result},
+                ensure_ascii=True,
+            )
+        )
         if result.get("status") != "done":
             return 1
         return 0

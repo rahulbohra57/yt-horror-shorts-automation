@@ -8,7 +8,7 @@ from time import sleep
 
 logger = logging.getLogger(__name__)
 
-YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload"
+YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube"
 CATEGORY_ENTERTAINMENT = "22"
 
 
@@ -31,6 +31,52 @@ class YouTubeService:
         url = f"https://youtube.com/shorts/{video_id}"
         logger.info(f"Uploaded to YouTube: {url}")
         return url
+
+    def ensure_playlist(self, name: str, description: str = "", privacy: str = "public") -> str:
+        service = self._get_service()
+        existing_id = self._find_playlist_id(service, name)
+        if existing_id:
+            return existing_id
+
+        body = {
+            "snippet": {"title": name[:150], "description": description[:5000]},
+            "status": {"privacyStatus": privacy},
+        }
+        resp = service.playlists().insert(part="snippet,status", body=body).execute()
+        playlist_id = resp.get("id")
+        if not playlist_id:
+            raise RuntimeError(f"Playlist creation failed for '{name}'")
+        logger.info("Created YouTube playlist '%s' (%s)", name, playlist_id)
+        return playlist_id
+
+    def add_video_to_playlist(self, playlist_id: str, video_id: str) -> None:
+        service = self._get_service()
+        body = {
+            "snippet": {
+                "playlistId": playlist_id,
+                "resourceId": {"kind": "youtube#video", "videoId": video_id},
+            }
+        }
+        service.playlistItems().insert(part="snippet", body=body).execute()
+        logger.info("Added video %s to playlist %s", video_id, playlist_id)
+
+    def _find_playlist_id(self, service, name: str) -> str | None:
+        token = None
+        wanted = (name or "").strip().lower()
+        while True:
+            resp = service.playlists().list(
+                part="snippet",
+                mine=True,
+                maxResults=50,
+                pageToken=token,
+            ).execute()
+            for item in resp.get("items", []):
+                title = (item.get("snippet", {}).get("title") or "").strip().lower()
+                if title == wanted:
+                    return item.get("id")
+            token = resp.get("nextPageToken")
+            if not token:
+                return None
 
     def _execute_upload(self, request) -> str:
         max_retries = 5

@@ -2,6 +2,7 @@ import json
 import logging
 import random
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 
@@ -162,6 +163,62 @@ SEO_CONFIGS = {
     },
 }
 
+STORY_FORMATS = [
+    "Real-time single-location incident where events unfold minute by minute.",
+    "Recovered evidence narrative using logs, messages, or recordings as anchors.",
+    "Confession format where the protagonist admits what happened after the event.",
+    "Rule-based setup where breaking one specific rule triggers escalating danger.",
+    "Countdown structure tied to a specific time limit before a reveal.",
+    "False-safe scenario where an apparent rescue or solution becomes the final threat.",
+]
+
+VISUAL_MOTIFS = [
+    "rain-soaked neon streets at night",
+    "clinical fluorescent interiors with long empty corridors",
+    "rural daylight unease with abandoned fields and silence",
+    "grainy security-camera aesthetics in parking and hall spaces",
+    "fog-heavy roads with isolated headlights and distant silhouettes",
+    "decaying domestic spaces with flickering warm practical lights",
+]
+
+CONCEPT_KEYWORDS = {
+    "mirror": ["mirror", "reflection", "glass"],
+    "phone_call": ["call", "phone", "voicemail", "ring"],
+    "chat_message": ["text", "message", "chat", "notification"],
+    "basement": ["basement", "cellar", "underground"],
+    "door_lock": ["door", "lock", "key", "deadbolt"],
+    "camera_feed": ["camera", "cctv", "security feed", "monitor"],
+    "clock_time": ["3:33", "midnight", "clock", "time", "am"],
+    "dead_contact": ["dead", "funeral", "grave", "obituary"],
+    "haunted_object": ["box", "doll", "portrait", "object", "artifact"],
+    "memory_manipulation": ["memory", "remember", "forgot", "imagined", "proof"],
+    "ritual_curse": ["ritual", "curse", "symbol", "demon", "entity"],
+    "home_intrusion": ["footsteps", "hallway", "closet", "attic", "window"],
+}
+
+CTA_BUCKETS = {
+    "engagement": [
+        "Comment your theory before reading anyone else's.",
+        "If this twist hit you, drop a Like and tell me why.",
+        "Type the creepiest line in this story in the comments.",
+    ],
+    "challenge": [
+        "Watch this again alone tonight and tell me if it feels different.",
+        "If you can watch this with the lights off, prove it in the comments.",
+        "Dare accepted? Replay this at 3 AM and tag a brave friend.",
+    ],
+    "community": [
+        "Team ghost or team logic? Pick a side below.",
+        "Vote now: coincidence or curse?",
+        "Would you stay or run? Answer with one word.",
+    ],
+    "cliffhanger": [
+        "Want part 2 of this case? Comment PART 2.",
+        "If this gets enough comments, I will drop the hidden follow-up.",
+        "There is a deeper layer to this story. Say NEXT for it.",
+    ],
+}
+
 
 class GeminiStoryEngine:
     """Generates unique story scripts via Gemini API. Raises GeminiFailedError on failure."""
@@ -186,13 +243,23 @@ class GeminiStoryEngine:
         except (FileNotFoundError, KeyError):
             return []
 
-    def generate(self, niche: str, recent_scripts: Iterable[str] | None = None) -> dict:
+    def generate(
+        self,
+        niche: str,
+        recent_scripts: Iterable[str] | None = None,
+        series_context: str = "",
+        series_episode_number: int | None = None,
+        series_name: str = "",
+    ) -> dict:
         recent = list(recent_scripts or [])
         niche_data = self._niches.get(niche, {})
-        pexels_queries = niche_data.get("pexels_queries", ["dark horror scene", "night horror", "scary dark"])
+        motif = self._select_visual_motif()
+        pexels_queries = self._build_pexels_queries(niche_data, motif)
         pexels_query = random.choice(pexels_queries)
 
-        hook, script, cta, title_seed = self._generate_with_fallback(niche, recent)
+        hook, script, cta, title_seed = self._generate_with_fallback(
+            niche, recent, motif, series_context, series_episode_number, series_name
+        )
 
         title = self._generate_title(niche, hook, title_seed)
         return {
@@ -206,17 +273,48 @@ class GeminiStoryEngine:
             "seo": self._generate_seo(title, niche),
         }
 
-    def _generate_with_fallback(self, niche: str, recent: list[str]) -> tuple[str, str, str, str]:
-        try:
-            return self._call_gemini(niche, recent)
-        except Exception as e:
-            logger.error(
-                "[GeminiStoryEngine] Gemini failed (%s: %s). Aborting — no template fallback.",
-                type(e).__name__, str(e)[:200],
-            )
-            raise GeminiFailedError(f"{type(e).__name__}: {str(e)[:300]}") from e
+    def _generate_with_fallback(
+        self,
+        niche: str,
+        recent: list[str],
+        motif: str,
+        series_context: str = "",
+        series_episode_number: int | None = None,
+        series_name: str = "",
+    ) -> tuple[str, str, str, str]:
+        last_error: Exception | None = None
+        for attempt in range(1, 6):
+            try:
+                return self._call_gemini(
+                    niche=niche,
+                    recent_scripts=recent,
+                    motif=motif,
+                    series_context=series_context,
+                    series_episode_number=series_episode_number,
+                    series_name=series_name,
+                )
+            except Exception as e:
+                last_error = e
+                logger.warning(
+                    "[GeminiStoryEngine] Attempt %d failed (%s: %s)",
+                    attempt, type(e).__name__, str(e)[:180],
+                )
+        assert last_error is not None
+        logger.error(
+            "[GeminiStoryEngine] Gemini failed after retries (%s: %s). Aborting — no template fallback.",
+            type(last_error).__name__, str(last_error)[:200],
+        )
+        raise GeminiFailedError(f"{type(last_error).__name__}: {str(last_error)[:300]}") from last_error
 
-    def _call_gemini(self, niche: str, recent_scripts: list[str]) -> tuple[str, str, str, str]:
+    def _call_gemini(
+        self,
+        niche: str,
+        recent_scripts: list[str],
+        motif: str = "",
+        series_context: str = "",
+        series_episode_number: int | None = None,
+        series_name: str = "",
+    ) -> tuple[str, str, str, str]:
         # Summarize recent story openings so Gemini actively avoids them
         recent_openings = []
         for s in recent_scripts[:15]:
@@ -229,6 +327,27 @@ class GeminiStoryEngine:
                 "\n\nCRITICAL: Do NOT start the story with ANY of these opening lines or anything similar:\n"
                 + "\n".join(recent_openings)
                 + "\nEvery story MUST have a completely different opening situation, character, and premise."
+            )
+        blocked_tags = self._recent_concept_tags(recent_scripts[:30])
+        if blocked_tags:
+            avoid_block += (
+                "\n\nCONCEPT FRESHNESS: Avoid these recently used concepts: "
+                + ", ".join(sorted(blocked_tags))
+                + ". Use a different core mechanism and reveal."
+            )
+        format_instruction = random.choice(STORY_FORMATS)
+        continuity_block = ""
+        if series_context.strip():
+            continuity_block = (
+                "\n\nSERIES CONTINUITY MODE:\n"
+                f"- Series name: {series_name or 'Unnamed Series'}\n"
+                f"- Current episode: {series_episode_number or 'unknown'}\n"
+                "- This episode MUST continue directly from prior events.\n"
+                "- Reuse key entities, unresolved threat, and consequences from previous episodes.\n"
+                "- Do NOT reset premise as a fresh standalone story.\n"
+                "- Advance the arc with new revelations while preserving internal logic.\n"
+                "- Prior context:\n"
+                f"{series_context}\n"
             )
 
         prompt = f"""You are an expert short-form storyteller for YouTube Shorts. Generate a **high-retention story** for a ~60-second video in the genres of **Horror, Mystery, Paranormal, Thriller, Urban Legend, Psychological Fear, Supernatural, or Dark Twist**.
@@ -248,6 +367,8 @@ The voiceover is read at a fast pace (+50% speed). To fill a full 60 seconds at 
 * Build tension quickly.
 * End with an **unexpected twist ending** that shocks viewers.
 * Final line must be memorable and creepy.
+* Story format for this generation: {format_instruction}
+* Keep the visual atmosphere compatible with this motif: {motif}
 * Avoid slow setup, backstory, or unnecessary details.
 * Create a clickable YouTube Shorts title under 58 characters. It must feel complete, specific, and curiosity-driven.
 * The title must NOT include hashtags, markdown, quotes, ellipsis, or trailing incomplete phrases.
@@ -274,6 +395,7 @@ Dark, suspenseful, binge-worthy, viral, cinematic.
 * My dead grandmother called me at 3:03 AM.
 * I moved into a house where mirrors blink first.
 {avoid_block}
+{continuity_block}
 
 Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw JSON object:
 {{"hook": "<opening hook sentence only>", "title": "<catchy complete title under 58 characters, no hashtags>", "script": "<150-170 word story starting with the exact hook and ending on the twist — no CTA>"}}"""
@@ -299,13 +421,14 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
         title_seed = parsed.get("title", "").strip()
         script = parsed["script"].strip()
         script = self._ensure_hook_starts_script(script, hook)
+        self._enforce_concept_freshness(script, blocked_tags)
 
         # Ensure story body ends with a complete sentence.
         script = self._close_incomplete_sentence(script)
 
         # Always stitch a CTA from our controlled pool. Prefer niche-specific
         # template CTAs so production can be tuned without changing code.
-        cta = random.choice(self._cta_pool_for(niche))
+        cta = self._choose_cta(niche)
         script = self._append_cta(script, cta)
 
         word_count = len(script.split())
@@ -343,6 +466,45 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
         niche_ctas = self._niches.get(niche, {}).get("ctas", [])
         clean_ctas = [cta.strip() for cta in niche_ctas if isinstance(cta, str) and cta.strip()]
         return clean_ctas or self._CTA_POOL
+
+    def _choose_cta(self, niche: str) -> str:
+        niche_ctas = self._niches.get(niche, {}).get("ctas", [])
+        clean_niche_ctas = [cta.strip() for cta in niche_ctas if isinstance(cta, str) and cta.strip()]
+        if clean_niche_ctas:
+            return random.choice(clean_niche_ctas)
+        pool = self._cta_pool_for(niche)
+        bucket = random.choice(list(CTA_BUCKETS.values()))
+        return random.choice(pool + bucket)
+
+    def _select_visual_motif(self) -> str:
+        iso_week = datetime.now().isocalendar().week
+        return VISUAL_MOTIFS[iso_week % len(VISUAL_MOTIFS)]
+
+    def _build_pexels_queries(self, niche_data: dict, motif: str) -> list[str]:
+        base_queries = niche_data.get("pexels_queries", ["dark horror scene", "night horror", "scary dark"])
+        motif_queries = [f"{q} {motif}" for q in base_queries[:4]]
+        return list(dict.fromkeys(motif_queries + base_queries))
+
+    def _concept_tags(self, text: str) -> set[str]:
+        normalized = re.sub(r"\s+", " ", (text or "").lower())
+        tags: set[str] = set()
+        for tag, markers in CONCEPT_KEYWORDS.items():
+            if any(marker in normalized for marker in markers):
+                tags.add(tag)
+        return tags
+
+    def _recent_concept_tags(self, recent_scripts: list[str]) -> set[str]:
+        tags: set[str] = set()
+        for script in recent_scripts:
+            tags.update(self._concept_tags(script))
+        return tags
+
+    def _enforce_concept_freshness(self, script: str, blocked_tags: set[str]) -> None:
+        if not blocked_tags:
+            return
+        overlap = self._concept_tags(script) & blocked_tags
+        if len(overlap) >= 2:
+            raise ValueError(f"Concept overlap too high: {sorted(overlap)}")
 
     def _append_cta(self, script: str, cta: str) -> str:
         script = script.strip()

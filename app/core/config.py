@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     MEDIA_CACHE_DIR: str = "/tmp/pexels_cache"
     OUTPUT_DIR: str = "/tmp/shorts_output"
     SCHEDULER_ENABLED: bool = True
-    SCHEDULE_TIMES: str = "00:10,06:10,12:10,18:10"
+    SCHEDULE_TIMES: str = "00:00,04:48,09:36,14:24,19:12"
     SCHEDULE_TIMEZONE: str = "Asia/Kolkata"
     SCHEDULE_UPLOAD: bool = True
     SCHEDULE_NICHES: str = "horror,mystery"

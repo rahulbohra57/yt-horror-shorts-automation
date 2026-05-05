@@ -2,6 +2,7 @@ import asyncio
 import logging
 import random
 import requests
+import re
 from app.core.config import settings
 from app.core.models import JobStatus, Short
 from app.services.gemini_story_engine import GeminiStoryEngine, GeminiFailedError
@@ -12,6 +13,7 @@ from app.services.youtube_service import YouTubeService
 from app.services.telegram_service import TelegramService
 from app.services.gdrive_service import GDriveService
 from app.services.cloudinary_service import CloudinaryService
+from app.services.series_service import SeriesService
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +55,9 @@ class Pipeline:
             if settings.CLOUDINARY_CLOUD_NAME and settings.CLOUDINARY_API_KEY and settings.CLOUDINARY_API_SECRET
             else None
         )
+        self.series = SeriesService()
 
-    async def run(self, niche: str, job_id: str, session, upload: bool = True) -> dict:
+    async def run(self, niche: str, job_id: str, session, upload: bool = True, series_mode: bool = False) -> dict:
         short = session.query(Short).filter_by(id=int(job_id)).first()
 
         def update_status(status, **kwargs):
@@ -65,14 +68,34 @@ class Pipeline:
                 session.commit()
 
         try:
-            logger.info(f"[{job_id}] Generating story for niche={niche}")
+            assignment = None
+            continuity_context = ""
+            effective_niche = niche
+            if short and series_mode:
+                try:
+                    assignment = self.series.assign_short(session, short)
+                    effective_niche = short.niche
+                    if assignment:
+                        continuity_context = self.series.get_series_continuity_context(
+                            session,
+                            assignment.series_id,
+                            assignment.episode_number,
+                        )
+                        logger.info(
+                            "[%s] Assigned to series='%s' episode=%s/%s",
+                            job_id, assignment.series_name, assignment.episode_number, assignment.planned_episodes,
+                        )
+                except Exception as series_err:
+                    logger.warning("[%s] Series assignment skipped: %s", job_id, series_err)
+
+            logger.info(f"[{job_id}] Generating story for niche={effective_niche}")
             update_status(JobStatus.GENERATING)
-            await self.telegram.notify_started(niche, job_id)
+            await self.telegram.notify_started(effective_niche, job_id)
             recent_scripts = []
             try:
                 rows = (
                     session.query(Short.script)
-                    .filter(Short.niche == niche, Short.script.isnot(None), Short.id != int(job_id))
+                    .filter(Short.niche == effective_niche, Short.script.isnot(None), Short.id != int(job_id))
                     .order_by(Short.created_at.desc())
                     .limit(40)
                     .all()
@@ -89,7 +112,15 @@ class Pipeline:
             except Exception as history_err:
                 logger.warning(f"[{job_id}] Failed to load recent scripts: {history_err}")
 
-            story = self.story.generate(niche, recent_scripts=recent_scripts)
+            story = self.story.generate(
+                effective_niche,
+                recent_scripts=recent_scripts,
+                series_context=continuity_context,
+                series_episode_number=assignment.episode_number if assignment else None,
+                series_name=assignment.series_name if assignment else "",
+            )
+            if assignment:
+                story = self._apply_series_title_prefix(story, assignment.title_prefix, assignment.episode_number)
             story = self._ensure_cta_in_script(story)
 
             logger.info(f"[{job_id}] Generating TTS")
@@ -125,7 +156,24 @@ class Pipeline:
                 update_status(JobStatus.UPLOADING)
                 youtube_url = self.youtube.upload(video_path, story["seo"])
                 if youtube_url:
-                    await self.telegram.notify_uploaded(story["title"], youtube_url, niche)
+                    await self.telegram.notify_uploaded(story["title"], youtube_url, effective_niche)
+                    if assignment:
+                        try:
+                            playlist_id = self.series.get_playlist_id(session, assignment.series_id)
+                            if not playlist_id:
+                                playlist_id = self.youtube.ensure_playlist(
+                                    assignment.playlist_name,
+                                    description=(
+                                        f"Story series: {assignment.series_name}. "
+                                        f"Episodes continue in strict order."
+                                    ),
+                                )
+                                self.series.ensure_playlist_id(session, assignment.series_id, playlist_id)
+                            video_id = self._extract_video_id(youtube_url)
+                            if video_id:
+                                self.youtube.add_video_to_playlist(playlist_id, video_id)
+                        except Exception as pl_err:
+                            logger.warning(f"[{job_id}] Playlist update failed (non-fatal): {pl_err}")
 
                 if self.cloudinary:
                     try:
@@ -144,7 +192,7 @@ class Pipeline:
                                 "cloudinary_url": cloudinary_url,
                                 "youtube_url": youtube_url,
                                 "title": story["title"],
-                                "niche": niche,
+                                "niche": effective_niche,
                                 "job_id": job_id,
                             },
                             timeout=15,
@@ -186,3 +234,21 @@ class Pipeline:
             logger.warning("CTA missing from generated script; appending before TTS")
             story = {**story, "script": f"{script} {cta}".strip()}
         return story
+
+    @staticmethod
+    def _apply_series_title_prefix(story: dict, prefix: str, episode_number: int) -> dict:
+        title = (story.get("title") or "").strip()
+        seo = story.get("seo") or {}
+        episode_marker = f"Ep {episode_number}"
+        core_title = title.replace(" #Shorts", "").strip()
+        prefixed = f"{prefix} | {episode_marker}: {core_title}".strip()
+        final_title = f"{prefixed[:90].rstrip()} #Shorts"
+        new_seo = {**seo, "title": final_title}
+        return {**story, "title": final_title, "seo": new_seo}
+
+    @staticmethod
+    def _extract_video_id(youtube_url: str) -> str:
+        if not youtube_url:
+            return ""
+        m = re.search(r"/shorts/([A-Za-z0-9_-]{6,})", youtube_url)
+        return m.group(1) if m else ""
