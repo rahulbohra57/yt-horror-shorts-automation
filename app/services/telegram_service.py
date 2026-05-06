@@ -61,7 +61,9 @@ class TelegramService:
             f"🤖 <b>Gemini story generation failed</b>\n"
             f"Niche: <code>{niche}</code>\n"
             f"Error: <code>{short_error}</code>\n\n"
-            f"⚠️ Check your GEMINI_API_KEY or quota. Pipeline has been stopped."
+            f"⚠️ Generation could not complete after retries. "
+            f"This can be due to model/API issues or content validation constraints. "
+            f"Pipeline has been stopped."
         )
 
     async def reply(self, chat_id: int | str, text: str) -> None:

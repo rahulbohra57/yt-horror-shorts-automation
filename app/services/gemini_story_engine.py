@@ -183,12 +183,12 @@ VISUAL_MOTIFS = [
 
 CONCEPT_KEYWORDS = {
     "mirror": ["mirror", "reflection", "glass"],
-    "phone_call": ["call", "phone", "voicemail", "ring"],
+    "phone_call": ["phone call", "voicemail", "unknown number", "ringing phone"],
     "chat_message": ["text", "message", "chat", "notification"],
     "basement": ["basement", "cellar", "underground"],
-    "door_lock": ["door", "lock", "key", "deadbolt"],
+    "door_lock": ["locked door", "deadbolt", "door chain", "jammed lock", "spare key"],
     "camera_feed": ["camera", "cctv", "security feed", "monitor"],
-    "clock_time": ["3:33", "midnight", "clock", "time", "am"],
+    "clock_time": ["3:33", "midnight", "2:17 am", "03:00 am", "countdown timer"],
     "dead_contact": ["dead", "funeral", "grave", "obituary"],
     "haunted_object": ["box", "doll", "portrait", "object", "artifact"],
     "memory_manipulation": ["memory", "remember", "forgot", "imagined", "proof"],

@@ -75,3 +75,20 @@ def test_script_is_forced_to_start_with_hook():
     )
 
     assert script.startswith("I found my own obituary under the bed.")
+
+
+def test_concept_tags_avoid_generic_false_positives():
+    engine = object.__new__(GeminiStoryEngine)
+
+    generic_text = "It was time to open the door with a key and check the phone battery."
+    assert "clock_time" not in engine._concept_tags(generic_text)
+    assert "door_lock" not in engine._concept_tags(generic_text)
+    assert "phone_call" not in engine._concept_tags(generic_text)
+
+    specific_text = (
+        "At midnight, the locked door rattled while a voicemail played from an unknown number."
+    )
+    tags = engine._concept_tags(specific_text)
+    assert "clock_time" in tags
+    assert "door_lock" in tags
+    assert "phone_call" in tags

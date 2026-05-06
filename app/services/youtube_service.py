@@ -8,7 +8,7 @@ from time import sleep
 
 logger = logging.getLogger(__name__)
 
-YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube"
+YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload"
 CATEGORY_ENTERTAINMENT = "22"
 
 
