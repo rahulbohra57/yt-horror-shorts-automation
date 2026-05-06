@@ -61,9 +61,40 @@ jobs:
           python-version: '3.11'
 
       - name: Install FFmpeg
+        timeout-minutes: 10
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          set -euo pipefail
+          if command -v ffmpeg >/dev/null 2>&1; then
+            echo "ffmpeg already present: $(ffmpeg -version | head -n 1)"
+            exit 0
+          fi
+
+          # Keep apt operations bounded and retry transient mirror/network failures.
+          for attempt in 1 2 3; do
+            echo "Attempt ${attempt}/3: apt-get update"
+            if sudo timeout 180s apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "apt-get update failed after 3 attempts"
+              exit 1
+            fi
+            sleep 10
+          done
+
+          for attempt in 1 2 3; do
+            echo "Attempt ${attempt}/3: apt-get install ffmpeg"
+            if sudo timeout 300s apt-get install -y --no-install-recommends ffmpeg -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "apt-get install ffmpeg failed after 3 attempts"
+              exit 1
+            fi
+            sleep 10
+          done
+
+          ffmpeg -version | head -n 1
 
       - name: Restore Story History Cache
         uses: actions/cache/restore@v4
