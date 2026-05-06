@@ -2,6 +2,7 @@ import json
 import logging
 import random
 import re
+import zlib
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
@@ -283,6 +284,9 @@ class GeminiStoryEngine:
         series_name: str = "",
     ) -> tuple[str, str, str, str]:
         last_error: Exception | None = None
+        blocked_tags = self._recent_concept_tags(recent[:30])
+
+        # Tier 1: strict novelty enforcement (current behavior).
         for attempt in range(1, 6):
             try:
                 return self._call_gemini(
@@ -292,6 +296,8 @@ class GeminiStoryEngine:
                     series_context=series_context,
                     series_episode_number=series_episode_number,
                     series_name=series_name,
+                    blocked_tags_override=blocked_tags,
+                    overlap_fail_count=2,
                 )
             except Exception as e:
                 last_error = e
@@ -299,9 +305,55 @@ class GeminiStoryEngine:
                     "[GeminiStoryEngine] Attempt %d failed (%s: %s)",
                     attempt, type(e).__name__, str(e)[:180],
                 )
+
+        # Tier 2: relaxed novelty retries when strict failures are overlap-specific.
+        if self._is_concept_overlap_error(last_error):
+            relaxed_blocked_tags = self._drop_most_common_blocked_tag(recent[:30], blocked_tags)
+            for attempt in range(1, 4):
+                try:
+                    result = self._call_gemini(
+                        niche=niche,
+                        recent_scripts=recent,
+                        motif=motif,
+                        series_context=series_context,
+                        series_episode_number=series_episode_number,
+                        series_name=series_name,
+                        blocked_tags_override=relaxed_blocked_tags,
+                        overlap_fail_count=3,
+                    )
+                    logger.warning(
+                        "[GeminiStoryEngine] Recovered via relaxed novelty fallback on attempt %d",
+                        attempt,
+                    )
+                    return result
+                except Exception as e:
+                    last_error = e
+                    logger.warning(
+                        "[GeminiStoryEngine] Relaxed fallback attempt %d failed (%s: %s)",
+                        attempt, type(e).__name__, str(e)[:180],
+                    )
+
+        # Tier 3: deterministic local template fallback so schedules can still ship.
+        try:
+            template_story = self._build_template_story(niche)
+            hook = template_story["hook"]
+            script = template_story["script"]
+            script = self._ensure_hook_starts_script(script, hook)
+            cta = self._choose_cta(niche)
+            script = self._append_cta(script, cta)
+            script = self._close_incomplete_sentence(script)
+            title_seed = template_story["title"]
+            logger.warning("[GeminiStoryEngine] Using deterministic template fallback for niche=%s", niche)
+            return hook, script, cta, title_seed
+        except Exception as template_error:
+            logger.error(
+                "[GeminiStoryEngine] Deterministic template fallback failed (%s: %s)",
+                type(template_error).__name__, str(template_error)[:200],
+            )
+
         assert last_error is not None
         logger.error(
-            "[GeminiStoryEngine] Gemini failed after retries (%s: %s). Aborting — no template fallback.",
+            "[GeminiStoryEngine] Gemini failed after strict/relaxed/template fallbacks (%s: %s). Aborting.",
             type(last_error).__name__, str(last_error)[:200],
         )
         raise GeminiFailedError(f"{type(last_error).__name__}: {str(last_error)[:300]}") from last_error
@@ -314,6 +366,8 @@ class GeminiStoryEngine:
         series_context: str = "",
         series_episode_number: int | None = None,
         series_name: str = "",
+        blocked_tags_override: set[str] | None = None,
+        overlap_fail_count: int = 2,
     ) -> tuple[str, str, str, str]:
         # Summarize recent story openings so Gemini actively avoids them
         recent_openings = []
@@ -328,7 +382,7 @@ class GeminiStoryEngine:
                 + "\n".join(recent_openings)
                 + "\nEvery story MUST have a completely different opening situation, character, and premise."
             )
-        blocked_tags = self._recent_concept_tags(recent_scripts[:30])
+        blocked_tags = blocked_tags_override if blocked_tags_override is not None else self._recent_concept_tags(recent_scripts[:30])
         if blocked_tags:
             avoid_block += (
                 "\n\nCONCEPT FRESHNESS: Avoid these recently used concepts: "
@@ -421,7 +475,7 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
         title_seed = parsed.get("title", "").strip()
         script = parsed["script"].strip()
         script = self._ensure_hook_starts_script(script, hook)
-        self._enforce_concept_freshness(script, blocked_tags)
+        self._enforce_concept_freshness(script, blocked_tags, fail_overlap_count=overlap_fail_count)
 
         # Ensure story body ends with a complete sentence.
         script = self._close_incomplete_sentence(script)
@@ -499,12 +553,105 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
             tags.update(self._concept_tags(script))
         return tags
 
-    def _enforce_concept_freshness(self, script: str, blocked_tags: set[str]) -> None:
+    def _enforce_concept_freshness(
+        self,
+        script: str,
+        blocked_tags: set[str],
+        fail_overlap_count: int = 2,
+    ) -> None:
         if not blocked_tags:
             return
         overlap = self._concept_tags(script) & blocked_tags
-        if len(overlap) >= 2:
+        if len(overlap) >= fail_overlap_count:
             raise ValueError(f"Concept overlap too high: {sorted(overlap)}")
+
+    def _is_concept_overlap_error(self, err: Exception | None) -> bool:
+        if err is None:
+            return False
+        return "Concept overlap too high" in str(err)
+
+    def _drop_most_common_blocked_tag(self, recent_scripts: list[str], blocked_tags: set[str]) -> set[str]:
+        if not blocked_tags:
+            return set()
+        counts: dict[str, int] = {tag: 0 for tag in blocked_tags}
+        for script in recent_scripts:
+            tags = self._concept_tags(script)
+            for tag in blocked_tags:
+                if tag in tags:
+                    counts[tag] += 1
+        tag_to_drop = max(sorted(counts), key=lambda t: counts[t])
+        relaxed = set(blocked_tags)
+        relaxed.discard(tag_to_drop)
+        logger.warning(
+            "[GeminiStoryEngine] Relaxing novelty guard by dropping common tag '%s' (count=%d)",
+            tag_to_drop,
+            counts.get(tag_to_drop, 0),
+        )
+        return relaxed
+
+    def _build_template_story(self, niche: str) -> dict:
+        niche_data = self._niches.get(niche, {})
+        templates = niche_data.get("script_templates") or []
+        if not templates:
+            raise ValueError(f"No script_templates found for niche '{niche}'")
+
+        # Deterministic selection for stable fallback behavior across retries/runs.
+        day_key = datetime.utcnow().strftime("%Y-%m-%d")
+        seed = zlib.crc32(f"{niche}:{day_key}".encode("utf-8"))
+        rng = random.Random(seed)
+
+        template = templates[seed % len(templates)]
+        hook = self._deterministic_hook(seed)
+        values = self._template_placeholder_values(niche_data, rng)
+        script = self._render_template(template, values)
+        title = self._build_fallback_title(hook, niche)
+        return {"hook": hook, "script": script, "title": title}
+
+    def _deterministic_hook(self, seed: int) -> str:
+        if not self._hooks:
+            return "At 3:12 AM, the lock clicked open by itself."
+        return self._hooks[seed % len(self._hooks)]
+
+    def _template_placeholder_values(self, niche_data: dict, rng: random.Random) -> dict[str, str]:
+        values: dict[str, str] = {}
+        for key, raw in niche_data.items():
+            if isinstance(raw, list) and raw:
+                values[key] = str(rng.choice(raw))
+
+        defaults = {
+            "character": "Riya",
+            "dead_person": "their best friend",
+            "time": "3:12 AM",
+            "timeframe": "three days",
+            "secret_message": "\"I never left.\"",
+            "tense_action": "they froze in place",
+            "discovery": "A photo was placed face-down on the bed",
+            "discovery_detail": "It was a note written in their handwriting",
+            "final_message": "\"Turn around slowly.\"",
+            "horror_detail": "No shadow. No sound.",
+            "closing_line": "\"I was always here.\"",
+            "cta": "Follow for the next story.",
+        }
+        for key, value in defaults.items():
+            values.setdefault(key, value)
+        return values
+
+    def _render_template(self, template: str, values: dict[str, str]) -> str:
+        def repl(match: re.Match) -> str:
+            key = match.group(1)
+            return str(values.get(key, f"something {key.replace('_', ' ')}"))
+
+        return re.sub(r"\{([a-zA-Z0-9_]+)\}", repl, template).strip()
+
+    def _build_fallback_title(self, hook: str, niche: str) -> str:
+        cleaned = re.sub(r"[\"'`*_]+", "", hook or "").strip()
+        cleaned = re.sub(r"\s+", " ", cleaned)
+        if cleaned.endswith("."):
+            cleaned = cleaned[:-1].strip()
+        if not cleaned:
+            base = GENRE_LABELS.get(niche, "Horror")
+            return f"{base} Story You Won't Forget"
+        return cleaned[:57].rstrip(" ,;:!?")
 
     def _append_cta(self, script: str, cta: str) -> str:
         script = script.strip()
