@@ -1,15 +1,13 @@
 name: Scheduled Shorts Upload
 
 on:
-  schedule:
-    # 5 runs/day at equal ~4h48m intervals (UTC).
-    # IST equivalents: 06:06, 10:54, 15:42, 20:30, 01:18.
-    # Dedicated series slot is 20:30 IST (15:00 UTC).
-    - cron: '36 0 * * *'
-    - cron: '24 5 * * *'
-    - cron: '12 10 * * *'
-    - cron: '0 15 * * *'
-    - cron: '48 19 * * *'
+  # schedule PAUSED — re-enable by restoring the cron entries below
+  # schedule:
+  #   - cron: '36 0 * * *'
+  #   - cron: '24 5 * * *'
+  #   - cron: '12 10 * * *'
+  #   - cron: '0 15 * * *'
+  #   - cron: '48 19 * * *'
   workflow_dispatch:
     inputs:
       niche:
@@ -115,12 +113,8 @@ jobs:
         run: |
           echo "niche=${{ github.event.inputs.niche || 'auto' }}" >> "$GITHUB_OUTPUT"
           echo "upload=${{ github.event.inputs.upload || 'true' }}" >> "$GITHUB_OUTPUT"
-          # One dedicated daily series slot; all other slots are regular stories.
-          if [ "${{ github.event_name }}" = "schedule" ] && [ "${{ github.event.schedule }}" = "0 15 * * *" ]; then
-            echo "mode=series" >> "$GITHUB_OUTPUT"
-          else
-            echo "mode=${{ github.event.inputs.mode || 'story' }}" >> "$GITHUB_OUTPUT"
-          fi
+          # Schedule paused — series slot logic disabled until schedule is restored
+          echo "mode=${{ github.event.inputs.mode || 'story' }}" >> "$GITHUB_OUTPUT"
 
       - name: Debug Run Context
         run: |

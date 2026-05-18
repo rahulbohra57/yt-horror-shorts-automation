@@ -1,8 +1,9 @@
 name: Telegram Command Bot
 
 on:
-  schedule:
-    - cron: '*/30 * * * *'   # every 30 minutes — Telegram API only, no YouTube quota
+  # schedule PAUSED — re-enable by restoring the cron entry below
+  # schedule:
+  #   - cron: '*/30 * * * *'   # every 30 minutes — Telegram API only, no YouTube quota
   workflow_dispatch:
 
 jobs:

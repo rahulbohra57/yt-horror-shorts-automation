@@ -1,8 +1,9 @@
 name: Daily Channel Stats
 
 on:
-  schedule:
-    - cron: '30 2 * * *'   # 8:00am IST (UTC+5:30)
+  # schedule PAUSED — re-enable by restoring the cron entry below
+  # schedule:
+  #   - cron: '30 2 * * *'   # 8:00am IST (UTC+5:30)
   workflow_dispatch:
 
 jobs:
