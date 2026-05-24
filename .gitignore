@@ -11,5 +11,7 @@ build/
 *.log
 logs/
 venv/
-*.log
-logs/
+CLAUDE.md
+.claude/
+*.json.bak
+horror-shorts-*.json
