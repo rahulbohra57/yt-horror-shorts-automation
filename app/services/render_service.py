@@ -65,10 +65,9 @@ class RenderService:
     def render(self, video_paths: list[str], audio_path: str, script: str, job_id: str, word_timings: list = None, niche: str = "", cta: str = "") -> str:
         """
         Full pipeline:
-          1. Apply subtle tail reverb to narration audio for a haunting finish
-          2. Merge/crop background video clips to 1080x1920 at audio duration
-          3. Burn-in captions (SRT via libass if available, otherwise Pillow overlay)
-          4. Normalize audio loudness to -16 LUFS, mix in background music with ducking
+          1. Merge/crop background video clips to 1080x1920 at audio duration
+          2. Burn-in captions (SRT via libass if available, otherwise Pillow overlay)
+          3. Normalize audio loudness to -16 LUFS, mix in background music with ducking
         Returns path to the final MP4.
         """
         output_path = self.output_dir / f"{job_id}.mp4"
@@ -76,9 +75,8 @@ class RenderService:
         if music_path:
             logger.info(f"Background music: {Path(music_path).name}")
         with tempfile.TemporaryDirectory() as tmp:
-            processed_audio = self._apply_tail_reverb(audio_path, tmp)
-            merged_bg = self._merge_and_crop_videos(video_paths, processed_audio, tmp)
-            captioned = self._add_captions(merged_bg, script, processed_audio, tmp, word_timings, cta=cta)
+            merged_bg = self._merge_and_crop_videos(video_paths, audio_path, tmp)
+            captioned = self._add_captions(merged_bg, script, audio_path, tmp, word_timings, cta=cta)
             self._normalize_audio(captioned, str(output_path), music_path=music_path)
         logger.info(f"Rendered: {output_path}")
         return str(output_path)
@@ -439,23 +437,6 @@ class RenderService:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-
-    def _apply_tail_reverb(self, audio_path: str, tmp: str) -> str:
-        """Apply a subtle atmospheric echo to the narration for a haunting feel."""
-        try:
-            out = Path(tmp) / "audio_reverb.mp3"
-            r = subprocess.run(
-                ["ffmpeg", "-i", audio_path,
-                 "-af", "aecho=0.6:0.55:80:0.15",
-                 "-c:a", "libmp3lame", "-b:a", "128k", "-y", str(out)],
-                capture_output=True, text=True,
-            )
-            if r.returncode == 0:
-                return str(out)
-            logger.warning(f"Tail reverb failed: {r.stderr[-200:]}")
-        except Exception as e:
-            logger.warning(f"Tail reverb error: {e}")
-        return audio_path
 
     def _generate_srt(self, script: str, audio_path: str, tmp: str, word_timings: list = None, cta: str = "") -> Path:
         srt_path = Path(tmp) / "captions.srt"
