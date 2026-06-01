@@ -258,9 +258,14 @@ class GeminiStoryEngine:
         pexels_queries = self._build_pexels_queries(niche_data, motif)
         pexels_query = random.choice(pexels_queries)
 
-        hook, script, cta, title_seed = self._generate_with_fallback(
+        hook, script, cta, title_seed, scene_queries = self._generate_with_fallback(
             niche, recent, motif, series_context, series_episode_number, series_name
         )
+
+        # Prepend story-specific scene queries so the pipeline fetches visually matched footage.
+        if scene_queries:
+            pexels_queries = list(dict.fromkeys(scene_queries + pexels_queries))
+        pexels_query = pexels_queries[0] if pexels_queries else "dark horror scene"
 
         title = self._generate_title(niche, hook, title_seed)
         return {
@@ -282,11 +287,11 @@ class GeminiStoryEngine:
         series_context: str = "",
         series_episode_number: int | None = None,
         series_name: str = "",
-    ) -> tuple[str, str, str, str]:
+    ) -> tuple[str, str, str, str, list]:
         last_error: Exception | None = None
         blocked_tags = self._recent_concept_tags(recent[:30])
 
-        # Tier 1: strict novelty enforcement (current behavior).
+        # Tier 1: strict novelty enforcement.
         for attempt in range(1, 6):
             try:
                 return self._call_gemini(
@@ -344,7 +349,7 @@ class GeminiStoryEngine:
             script = self._close_incomplete_sentence(script)
             title_seed = template_story["title"]
             logger.warning("[GeminiStoryEngine] Using deterministic template fallback for niche=%s", niche)
-            return hook, script, cta, title_seed
+            return hook, script, cta, title_seed, []
         except Exception as template_error:
             logger.error(
                 "[GeminiStoryEngine] Deterministic template fallback failed (%s: %s)",
@@ -406,53 +411,57 @@ class GeminiStoryEngine:
 
         prompt = f"""You are an expert short-form storyteller for YouTube Shorts. Generate a **high-retention story** for a ~60-second video in the genres of **Horror, Mystery, Paranormal, Thriller, Urban Legend, Psychological Fear, Supernatural, or Dark Twist**.
 
-The voiceover is read at a fast pace (+50% speed). To fill a full 60 seconds at that speed the story must be **150–170 words**. Do NOT write fewer words — an under-length story leaves dead air at the end.
+The voiceover is read at a fast pace (+50% speed). At that speed, **130–140 words fills exactly 60 seconds**. Do NOT write more or fewer — overage gets cut off, underage leaves dead air.
 
 ### Requirements:
 
-* Length: **150–170 words** (story only — no CTA, no sign-off)
+* Length: **exactly 130–140 words** (story only — no CTA, no sign-off)
 * Start the script with the exact hook sentence. The first 10 seconds must be impossible to ignore.
-* In the first 35 words, include one disturbing question, impossible discovery, or immediate danger.
+* Use **second-person perspective** ("You hear...", "You open the door...", "Your phone rings...") in the hook and at key moments to pull the viewer directly into the story.
+* In the first 30 words, include one disturbing question, impossible discovery, or immediate danger.
+* **Vary sentence length deliberately.** Use short punchy sentences (3–6 words) at the hook and the final twist. Use longer sentences (10–15 words) in the build-up. This creates natural dramatic pacing in the narration.
 * Maintain suspense every few lines.
-* Use simple, cinematic language.
+* Use simple, visceral, cinematic language.
 * Include 1 main character only (unless necessary).
 * Use a MIX of character names — American (Jake, Emma, Ryan, Sarah, Tyler, Ashley, Michael, Jessica, Chris, Melissa), British (Oliver, Charlotte, Harry, Amelia, James, Sophie, George, Lily, Thomas, Isabelle), or Indian (Riya, Arjun, Meera, Kabir, Priya, Dev, Ananya, Vikram). Do NOT always use Indian names — vary nationality each story.
-* Story should feel realistic at first, then become disturbing.
-* Build tension quickly.
-* End with an **unexpected twist ending** that shocks viewers.
-* Final line must be memorable and creepy.
+* Story should feel realistic at first, then become deeply disturbing.
+* End with an **unexpected twist ending** that reframes everything — the final line must be the most memorable and creepy line in the whole story.
 * Story format for this generation: {format_instruction}
 * Keep the visual atmosphere compatible with this motif: {motif}
-* Avoid slow setup, backstory, or unnecessary details.
-* Create a clickable YouTube Shorts title under 58 characters. It must feel complete, specific, and curiosity-driven.
-* The title must NOT include hashtags, markdown, quotes, ellipsis, or trailing incomplete phrases.
-* DO NOT include any CTA, subscribe line, or sign-off — the story ends on the twist.
+* Avoid slow setup, backstory, or unnecessary details. Every sentence must earn its place.
+* DO NOT include any CTA, subscribe line, or sign-off — the story ends cold on the twist.
 * DO NOT use: ellipsis (...), em dashes (—), asterisks, or markdown formatting in the script.
 * Write in plain prose — no bullet points, no headers, no special characters.
 
-### Structure:
+### 4-Beat Structure (strict):
 
-1. **Hook (0-5 sec):** shocking or mysterious opening line
-2. **Build-up (5-40 sec):** strange events escalate
-3. **Reveal (40-55 sec):** terrifying truth appears
-4. **Twist Ending (55-60 sec):** unexpected final punch
+1. **Hook (0–5 sec):** One or two short punchy sentences. Impossible situation. Immediate dread.
+2. **Build-up (5–40 sec):** Strange events escalate. Each sentence raises the stakes. Longer sentences build pressure.
+3. **Reveal (40–50 sec):** The terrifying truth surfaces. Short sharp sentences increase pace.
+4. **Twist Ending (50–60 sec):** Single gut-punch line that reframes everything. Must be the shortest, most memorable sentence in the story.
 
 ### Tone:
 
-Dark, suspenseful, binge-worthy, viral, cinematic.
+Dark, visceral, binge-worthy, cinematic. Every word should feel earned.
 
 ### Example Hooks (create your OWN completely unique hook — do NOT copy or resemble these):
 
-* Every night, someone knocks on my window from the 10th floor.
-* I found a photo of myself sleeping, taken yesterday.
-* The voice from my basement knew my name.
-* My dead grandmother called me at 3:03 AM.
-* I moved into a house where mirrors blink first.
+* You hear knocking from inside your own walls.
+* The voicemail was from your number. You haven't left home in three days.
+* You found a photo of yourself sleeping — dated tomorrow.
+* The babysitter called. Your kids were fine. You don't have kids.
+* Your reflection moved a second after you did.
 {avoid_block}
 {continuity_block}
 
+### Titles:
+Create 3 distinct clickable YouTube Shorts title options, each under 58 characters. Each must feel complete, specific, and curiosity-driven — lead with the twist or the impossible situation, not the setup. No hashtags, markdown, quotes, ellipsis, or trailing incomplete phrases.
+
+### Scene Queries:
+Provide 3 specific Pexels video search queries that match the visual atmosphere of this story (e.g. "dark empty hospital corridor flickering lights", "abandoned house night fog", "woman alone dark parking garage"). Be specific — generic queries like "horror" or "dark" are useless.
+
 Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw JSON object:
-{{"hook": "<opening hook sentence only>", "title": "<catchy complete title under 58 characters, no hashtags>", "script": "<150-170 word story starting with the exact hook and ending on the twist — no CTA>"}}"""
+{{"hook": "<opening hook sentence only>", "title": "<best title under 58 chars>", "title_alt_1": "<second title option>", "title_alt_2": "<third title option>", "scene_queries": ["<query 1>", "<query 2>", "<query 3>"], "script": "<130-140 word story starting with the exact hook and ending on the twist — no CTA>"}}"""
 
 
         response = self._model.generate_content(
@@ -472,26 +481,33 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
 
         parsed = json.loads(text)
         hook = parsed["hook"].strip()
-        title_seed = parsed.get("title", "").strip()
         script = parsed["script"].strip()
         script = self._ensure_hook_starts_script(script, hook)
         self._enforce_concept_freshness(script, blocked_tags, fail_overlap_count=overlap_fail_count)
 
-        # Ensure story body ends with a complete sentence.
         script = self._close_incomplete_sentence(script)
 
-        # Always stitch a CTA from our controlled pool. Prefer niche-specific
-        # template CTAs so production can be tuned without changing code.
         cta = self._choose_cta(niche)
         script = self._append_cta(script, cta)
 
+        # Pick the best title from up to 3 variants Gemini returned.
+        title_candidates = [
+            parsed.get("title", "").strip(),
+            parsed.get("title_alt_1", "").strip(),
+            parsed.get("title_alt_2", "").strip(),
+        ]
+        valid_titles = [t for t in title_candidates if t and len(t) <= 58]
+        title_seed = random.choice(valid_titles) if valid_titles else (title_candidates[0] or "")
+
+        scene_queries = [q.strip() for q in parsed.get("scene_queries", []) if isinstance(q, str) and q.strip()]
+
         word_count = len(script.split())
         logger.info(
-            "[GeminiStoryEngine] Generated niche=%s words=%d cta='%s' hook='%s...'",
-            niche, word_count, cta, hook[:50],
+            "[GeminiStoryEngine] Generated niche=%s words=%d cta='%s' hook='%s...' scene_queries=%s",
+            niche, word_count, cta, hook[:50], scene_queries,
         )
 
-        return hook, script, cta, title_seed
+        return hook, script, cta, title_seed, scene_queries
 
     _CTA_POOL = [
         "If this scared you, smash Like before it finds you.",

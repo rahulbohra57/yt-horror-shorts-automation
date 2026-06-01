@@ -10,7 +10,7 @@ import edge_tts
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_VOICE = "en-US-GuyNeural"
+DEFAULT_VOICE = "en-GB-RyanNeural"
 DEFAULT_RATE = "+50%"
 EDGE_TTS_MAX_RETRIES = 3
 
