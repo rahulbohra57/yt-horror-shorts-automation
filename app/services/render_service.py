@@ -121,12 +121,13 @@ class RenderService:
             start = random.uniform(0, max_start) if max_start > 0 else 0.0
             t = Path(tmp) / f"clip_{i}.mp4"
             # Ken Burns: slow drift from far corner toward center over clip duration.
+            # setpts=PTS-STARTPTS resets t=0 at each clip so the expression is correct.
             # Color grade: slight desaturation + contrast boost for cinematic horror look.
             vf = (
                 f"scale={W_LARGE}:{H_LARGE}:force_original_aspect_ratio=increase,"
-                f"crop={W_LARGE}:{H_LARGE},setsar=1,"
+                f"crop={W_LARGE}:{H_LARGE},setsar=1,setpts=PTS-STARTPTS,"
                 f"crop={TARGET_W}:{TARGET_H}:"
-                f"x='{DX}*max(0\\,1-t/{clip_dur:.3f})':y='{DY}*max(0\\,1-t/{clip_dur:.3f})',"
+                f"x={DX}*max(0\\,1-t/{clip_dur:.3f}):y={DY}*max(0\\,1-t/{clip_dur:.3f}),"
                 f"eq=saturation=0.72:contrast=1.08:brightness=-0.02"
             )
             cmd = [
@@ -440,20 +441,13 @@ class RenderService:
     # ------------------------------------------------------------------
 
     def _apply_tail_reverb(self, audio_path: str, tmp: str) -> str:
-        """Overlay a decaying echo on the final 6 seconds for a haunting atmospheric finish."""
+        """Apply a subtle atmospheric echo to the narration for a haunting feel."""
         try:
-            dur = self._get_duration(audio_path)
-            echo_start = max(0.0, dur - 6.0)
             out = Path(tmp) / "audio_reverb.mp3"
-            # Split audio into two streams: original + echo-processed tail mixed back in at 35%
-            fc = (
-                f"[0:a]asplit=2[main][src];"
-                f"[src]atrim=start={echo_start:.3f},aecho=0.6:0.55:120:0.3[echoed];"
-                f"[main][echoed]amix=inputs=2:duration=first:weights=1 0.35[aout]"
-            )
             r = subprocess.run(
-                ["ffmpeg", "-i", audio_path, "-filter_complex", fc,
-                 "-map", "[aout]", "-c:a", "libmp3lame", "-b:a", "128k", "-y", str(out)],
+                ["ffmpeg", "-i", audio_path,
+                 "-af", "aecho=0.6:0.55:80:0.15",
+                 "-c:a", "libmp3lame", "-b:a", "128k", "-y", str(out)],
                 capture_output=True, text=True,
             )
             if r.returncode == 0:
