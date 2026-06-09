@@ -133,7 +133,7 @@ class RenderService:
                 "-t", f"{clip_dur:.2f}",
                 "-vf", vf,
                 "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-                "-pix_fmt", "yuv420p", "-r", "30",
+                "-pix_fmt", "yuv420p", "-r", "30", "-threads", "1",
                 "-an", "-y", str(t)
             ]
             self._run(cmd)
@@ -155,7 +155,7 @@ class RenderService:
             "ffmpeg", "-f", "concat", "-safe", "0", "-i", str(concat_list),
             "-t", str(audio_duration + 2.0),
             "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-            "-pix_fmt", "yuv420p", "-r", "30",
+            "-pix_fmt", "yuv420p", "-r", "30", "-threads", "1",
             "-an", "-y", str(out)
         ]
         self._run(cmd)
@@ -192,7 +192,7 @@ class RenderService:
                 f"OutlineColour=&H00000000,Outline=3,Shadow=2,"
                 f"ShadowColour=&H80000000,Alignment=2,MarginV=160{font_arg}'"
             ),
-            "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-threads", "1",
             "-c:a", "aac", "-b:a", "128k",
             "-shortest", "-y", str(out)
         ]
@@ -244,7 +244,7 @@ class RenderService:
                 "ffmpeg", "-i", video_path, "-i", str(caption_track), "-i", audio_path,
                 "-filter_complex", "[0:v][1:v]overlay=0:0:format=auto:eof_action=endall[vout]",
                 "-map", "[vout]", "-map", "2:a",
-                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-threads", "1",
                 "-c:a", "aac", "-b:a", "128k",
                 "-y", str(out),
             ])
@@ -308,9 +308,9 @@ class RenderService:
     def _build_alpha_caption_track(self, concat_path: Path, tmp: str) -> Path | None:
         """Encode PNG concat list into an alpha-channel video. Tries ffv1 → qtrle → prores."""
         attempts = [
-            (Path(tmp) / "cap_track.mkv",  ["-c:v", "ffv1",     "-pix_fmt", "rgba",         "-r", "30"]),
-            (Path(tmp) / "cap_track.mov",  ["-c:v", "qtrle",    "-pix_fmt", "argb",         "-r", "30"]),
-            (Path(tmp) / "cap_prores.mov", ["-c:v", "prores_ks","-profile:v","4444","-pix_fmt","yuva444p10le","-r","30"]),
+            (Path(tmp) / "cap_track.webm", ["-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-r", "30", "-b:v", "0", "-crf", "30", "-threads", "1"]),
+            (Path(tmp) / "cap_track.mkv",  ["-c:v", "ffv1",       "-pix_fmt", "rgba",      "-r", "30", "-threads", "1"]),
+            (Path(tmp) / "cap_track.mov",  ["-c:v", "qtrle",      "-pix_fmt", "argb",      "-r", "30"]),
         ]
         for track_path, codec_args in attempts:
             r = subprocess.run(
@@ -405,30 +405,30 @@ class RenderService:
                 "-stream_loop", "-1", "-i", music_path,
                 "-filter_complex", audio_filter,
                 "-map", "0:v", "-map", "[aout]",
-                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-threads", "1",
                 "-pix_fmt", "yuv420p", "-r", "30",
                 "-movflags", "+faststart",
                 "-shortest", "-y", output_path
             ]
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             if result.returncode == 0:
                 return
-            logger.warning(f"Music mix failed ({result.stderr[-300:]}), falling back to no music")
+            logger.warning(f"Music mix failed ({result.stderr[-300:].decode(errors='replace')}), falling back to no music")
 
         cmd = [
             "ffmpeg", "-i", input_path,
             "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-threads", "1",
             "-pix_fmt", "yuv420p", "-r", "30",
             "-movflags", "+faststart",
             "-y", output_path
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         if result.returncode != 0:
             logger.warning("loudnorm failed, copying without normalization")
             self._run([
                 "ffmpeg", "-i", input_path,
-                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-threads", "1",
                 "-pix_fmt", "yuv420p", "-r", "30",
                 "-movflags", "+faststart",
                 "-y", output_path
@@ -554,6 +554,6 @@ class RenderService:
 
     def _run(self, cmd: list):
         logger.debug(f"FFmpeg cmd: {' '.join(str(c) for c in cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         if result.returncode != 0:
-            raise RuntimeError(f"FFmpeg error:\n{result.stderr[-1000:]}")
+            raise RuntimeError(f"FFmpeg error:\n{result.stderr[-1000:].decode(errors='replace')}")
