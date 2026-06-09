@@ -51,7 +51,7 @@ def _has_subtitles_filter() -> bool:
         ["ffmpeg", "-filters"],
         capture_output=True, text=True
     )
-    return "subtitles" in result.stdout
+    return "subtitles" in result.stdout or "subtitles" in result.stderr
 
 
 _SUBTITLES_AVAILABLE = _has_subtitles_filter()
