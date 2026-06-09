@@ -132,7 +132,7 @@ class RenderService:
                 "ffmpeg", "-ss", f"{start:.2f}", "-i", vp,
                 "-t", f"{clip_dur:.2f}",
                 "-vf", vf,
-                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
                 "-pix_fmt", "yuv420p", "-r", "30", "-threads", "1",
                 "-an", "-y", str(t)
             ]
@@ -154,7 +154,7 @@ class RenderService:
         cmd = [
             "ffmpeg", "-f", "concat", "-safe", "0", "-i", str(concat_list),
             "-t", str(audio_duration + 2.0),
-            "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
             "-pix_fmt", "yuv420p", "-r", "30", "-threads", "1",
             "-an", "-y", str(out)
         ]
@@ -192,7 +192,7 @@ class RenderService:
                 f"OutlineColour=&H00000000,Outline=3,Shadow=2,"
                 f"ShadowColour=&H80000000,Alignment=2,MarginV=160{font_arg}'"
             ),
-            "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-threads", "1",
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-threads", "1",
             "-c:a", "aac", "-b:a", "128k",
             "-shortest", "-y", str(out)
         ]
@@ -244,7 +244,7 @@ class RenderService:
                 "ffmpeg", "-i", video_path, "-i", str(caption_track), "-i", audio_path,
                 "-filter_complex", "[0:v][1:v]overlay=0:0:format=auto:eof_action=endall[vout]",
                 "-map", "[vout]", "-map", "2:a",
-                "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-threads", "1",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-threads", "1",
                 "-c:a", "aac", "-b:a", "128k",
                 "-y", str(out),
             ])
@@ -405,7 +405,7 @@ class RenderService:
                 "-stream_loop", "-1", "-i", music_path,
                 "-filter_complex", audio_filter,
                 "-map", "0:v", "-map", "[aout]",
-                "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-threads", "1",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-threads", "1",
                 "-pix_fmt", "yuv420p", "-r", "30",
                 "-movflags", "+faststart",
                 "-shortest", "-y", output_path
@@ -418,7 +418,7 @@ class RenderService:
         cmd = [
             "ffmpeg", "-i", input_path,
             "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-threads", "1",
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-threads", "1",
             "-pix_fmt", "yuv420p", "-r", "30",
             "-movflags", "+faststart",
             "-y", output_path
@@ -428,7 +428,7 @@ class RenderService:
             logger.warning("loudnorm failed, copying without normalization")
             self._run([
                 "ffmpeg", "-i", input_path,
-                "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-threads", "1",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-threads", "1",
                 "-pix_fmt", "yuv420p", "-r", "30",
                 "-movflags", "+faststart",
                 "-y", output_path

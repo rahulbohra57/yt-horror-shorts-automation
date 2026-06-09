@@ -130,9 +130,9 @@ class Pipeline:
             pexels_queries = story.get("pexels_queries", [story["pexels_query"]])
             random.shuffle(pexels_queries)
             video_paths = []
-            for q in pexels_queries[:6]:
+            for q in pexels_queries[:2]:
                 try:
-                    videos = self.pexels.search_videos(q, count=2)
+                    videos = self.pexels.search_videos(q, count=1)
                     for v in videos:
                         try:
                             video_paths.append(self.pexels.download_video(v["url"]))
