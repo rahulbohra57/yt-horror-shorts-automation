@@ -128,9 +128,15 @@ class Pipeline:
 
             logger.info(f"[{job_id}] Fetching Pexels videos (multi-scene)")
             pexels_queries = story.get("pexels_queries", [story["pexels_query"]])
-            random.shuffle(pexels_queries)
+            # Use scene-specific queries first (Gemini provides 6), deduplicate, cap at 6
+            seen_queries: set[str] = set()
+            unique_queries = []
+            for q in pexels_queries:
+                if q not in seen_queries:
+                    seen_queries.add(q)
+                    unique_queries.append(q)
             video_paths = []
-            for q in pexels_queries[:2]:
+            for q in unique_queries[:6]:
                 try:
                     videos = self.pexels.search_videos(q, count=1)
                     for v in videos:

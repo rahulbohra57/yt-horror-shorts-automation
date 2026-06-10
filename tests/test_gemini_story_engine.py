@@ -26,7 +26,7 @@ def test_gemini_uses_niche_cta_pool():
     }
     engine._model = DummyGeminiModel()
 
-    hook, script, cta, title_seed = engine._call_gemini("horror", [])
+    hook, script, cta, title_seed, scene_queries = engine._call_gemini("horror", [])
 
     assert hook == "The old phone rang from inside the wall."
     assert title_seed == "The Phone Inside The Wall"

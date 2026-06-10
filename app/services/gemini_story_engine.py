@@ -458,10 +458,10 @@ Dark, visceral, binge-worthy, cinematic. Every word should feel earned.
 Create 3 distinct clickable YouTube Shorts title options, each under 58 characters. Each must feel complete, specific, and curiosity-driven — lead with the twist or the impossible situation, not the setup. No hashtags, markdown, quotes, ellipsis, or trailing incomplete phrases.
 
 ### Scene Queries:
-Provide 3 specific Pexels video search queries that match the visual atmosphere of this story (e.g. "dark empty hospital corridor flickering lights", "abandoned house night fog", "woman alone dark parking garage"). Be specific — generic queries like "horror" or "dark" are useless.
+Provide 6 specific Pexels video search queries that match distinct visual moments in this story — one per scene beat (e.g. "dark empty hospital corridor flickering lights", "abandoned house night fog", "woman alone dark parking garage", "shadowy figure doorway", "closeup hand old key", "foggy forest night path"). Each query must be a different scene/location — do NOT repeat similar scenes. Be specific — generic queries like "horror" or "dark" are useless.
 
 Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw JSON object:
-{{"hook": "<opening hook sentence only>", "title": "<best title under 58 chars>", "title_alt_1": "<second title option>", "title_alt_2": "<third title option>", "scene_queries": ["<query 1>", "<query 2>", "<query 3>"], "script": "<130-140 word story starting with the exact hook and ending on the twist — no CTA>"}}"""
+{{"hook": "<opening hook sentence only>", "title": "<best title under 58 chars>", "title_alt_1": "<second title option>", "title_alt_2": "<third title option>", "scene_queries": ["<query 1>", "<query 2>", "<query 3>", "<query 4>", "<query 5>", "<query 6>"], "script": "<130-140 word story starting with the exact hook and ending on the twist — no CTA>"}}"""
 
 
         response = self._model.generate_content(
