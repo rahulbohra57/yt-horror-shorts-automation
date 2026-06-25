@@ -18,16 +18,7 @@ PIL_FONT_SIZE = 90
 CAPTION_WORDS_PER_SEGMENT = 2
 
 _BG_AUDIO_DIR = Path(__file__).parent.parent.parent / "background_audio"
-_NICHE_MUSIC_FOLDER = {
-    "horror": "Horror",
-    "mystery": "Mystery",
-    "paranormal": "Horror",
-    "twist_endings": "Mystery",
-    "psychological": "Horror",
-    "supernatural": "Horror",
-    "slasher": "Horror",
-    "folk_horror": "Horror",
-}
+_SUSPENSE_FOLDER = _BG_AUDIO_DIR / "suspense"
 
 # (font_path, index) — prefer bold variants
 _FONT_CANDIDATES = [
@@ -82,14 +73,10 @@ class RenderService:
         return str(output_path)
 
     def _pick_background_music(self, niche: str) -> str | None:
-        folder_name = _NICHE_MUSIC_FOLDER.get(niche)
-        if not folder_name:
+        if not _SUSPENSE_FOLDER.exists():
+            logger.warning(f"Suspense audio folder not found: {_SUSPENSE_FOLDER}")
             return None
-        folder = _BG_AUDIO_DIR / folder_name
-        if not folder.exists():
-            logger.warning(f"Background audio folder not found: {folder}")
-            return None
-        files = list(folder.glob("*.mp3"))
+        files = list(_SUSPENSE_FOLDER.glob("*.mp3"))
         return str(random.choice(files)) if files else None
 
     # ------------------------------------------------------------------
