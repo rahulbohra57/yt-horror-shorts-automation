@@ -195,6 +195,20 @@ CONCEPT_KEYWORDS = {
     "memory_manipulation": ["memory", "remember", "forgot", "imagined", "proof"],
     "ritual_curse": ["ritual", "curse", "symbol", "demon", "entity"],
     "home_intrusion": ["footsteps", "hallway", "closet", "attic", "window"],
+    "social_media": ["social media", "instagram", "livestream", "followers", "comment section"],
+    "photograph_letter": ["photograph", "photo", "polaroid", "handwritten letter", "old note"],
+    "power_outage": ["power went out", "power outage", "lights flickered off", "blackout"],
+    "static_noise": ["static", "white noise", "radio static", "buzzing on the line"],
+    "hospital": ["hospital", "er room", "hospital bed", "nurse station"],
+    "car_breakdown": ["car broke down", "engine stalled", "flat tire", "stranded on the road"],
+    "hotel_room": ["hotel room", "motel", "hotel hallway", "front desk clerk", "hotel"],
+    "webcam_stream": ["webcam", "laptop camera", "video call", "screen recording"],
+    "tape_recording": ["tape recording", "cassette", "recorder", "voice memo"],
+    "doppelganger": ["doppelganger", "exact copy", "looked exactly like", "impostor"],
+    "missing_time": ["missing time", "lost hours", "gap in memory", "hours had passed"],
+    "family_secret": ["family secret", "adopted", "biological father", "hidden sibling"],
+    "forest_isolation": ["forest", "woods", "hiking trail", "cabin in the woods"],
+    "wedding_object": ["wedding ring", "engagement ring", "wedding dress", "bridal"],
 }
 
 CTA_BUCKETS = {

@@ -169,6 +169,23 @@ def test_generate_series_title_raises_on_empty_response():
         engine.generate_series_title("horror", "You hear your own voice.", "A short story.")
 
 
+def test_expanded_concept_tags_catch_new_tropes():
+    engine = object.__new__(GeminiStoryEngine)
+
+    text = (
+        "The old tape recording played back a voice from the hospital hallway, right after "
+        "the car broke down outside the hotel and the power went out with a burst of static."
+    )
+    tags = engine._concept_tags(text)
+
+    assert "tape_recording" in tags
+    assert "hospital" in tags
+    assert "car_breakdown" in tags
+    assert "hotel_room" in tags
+    assert "power_outage" in tags
+    assert "static_noise" in tags
+
+
 def test_concept_tags_avoid_generic_false_positives():
     engine = object.__new__(GeminiStoryEngine)
 
