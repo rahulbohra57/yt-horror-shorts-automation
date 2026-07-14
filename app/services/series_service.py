@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from app.core.models import SeriesEpisode, SeriesStatus, Short, StorySeries
 
-SERIES_EPISODE_RANGE = (4, 5)
+SERIES_EPISODE_RANGE = (5, 6)
 SERIES_NAME_WORDS_A = [
     "Night", "Shadow", "Silent", "Broken", "Whisper", "Crimson", "Vanishing", "Grim",
 ]
@@ -28,9 +28,11 @@ def _utcnow_naive() -> datetime:
 
 
 class SeriesService:
-    def assign_short(self, session, short: Short) -> SeriesAssignment | None:
+    def assign_short(self, session, short: Short, allow_new_series: bool = True) -> SeriesAssignment | None:
         active = self._get_active_series(session)
         if active is None:
+            if not allow_new_series:
+                return None
             active = self._maybe_start_new_series(session, short.niche)
         if active is None:
             return None
@@ -108,6 +110,18 @@ class SeriesService:
     def get_playlist_id(self, session, series_id: int) -> str | None:
         series = session.query(StorySeries).filter(StorySeries.id == series_id).first()
         return series.playlist_id if series else None
+
+    def rename_series(self, session, series_id: int, new_name: str) -> None:
+        new_name = (new_name or "").strip()
+        if not new_name:
+            return
+        series = session.query(StorySeries).filter(StorySeries.id == series_id).first()
+        if not series:
+            return
+        series.name = new_name
+        series.title_prefix = new_name
+        series.playlist_name = f"{new_name} Series"
+        session.commit()
 
     def _get_active_series(self, session) -> StorySeries | None:
         series = (
