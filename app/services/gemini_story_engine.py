@@ -266,6 +266,8 @@ class GeminiStoryEngine:
         series_episode_number: int | None = None,
         series_name: str = "",
         is_final_episode: bool = True,
+        recent_titles: Iterable[str] | None = None,
+        recent_hooks: Iterable[str] | None = None,
     ) -> dict:
         recent = list(recent_scripts or [])
         niche_data = self._niches.get(niche, {})
@@ -274,7 +276,8 @@ class GeminiStoryEngine:
         pexels_query = random.choice(pexels_queries)
 
         hook, script, cta, title_seed, scene_queries = self._generate_with_fallback(
-            niche, recent, motif, series_context, series_episode_number, series_name, is_final_episode
+            niche, recent, motif, series_context, series_episode_number, series_name,
+            is_final_episode, list(recent_titles or []), list(recent_hooks or []),
         )
 
         # Prepend story-specific scene queries so the pipeline fetches visually matched footage.
@@ -327,6 +330,8 @@ class GeminiStoryEngine:
         series_episode_number: int | None = None,
         series_name: str = "",
         is_final_episode: bool = True,
+        recent_titles: list[str] | None = None,
+        recent_hooks: list[str] | None = None,
     ) -> tuple[str, str, str, str, list]:
         last_error: Exception | None = None
         blocked_tags = self._recent_concept_tags(recent[:30])
@@ -344,6 +349,8 @@ class GeminiStoryEngine:
                     blocked_tags_override=blocked_tags,
                     overlap_fail_count=2,
                     is_final_episode=is_final_episode,
+                    recent_titles=recent_titles,
+                    recent_hooks=recent_hooks,
                 )
             except Exception as e:
                 last_error = e
@@ -367,6 +374,8 @@ class GeminiStoryEngine:
                         blocked_tags_override=relaxed_blocked_tags,
                         overlap_fail_count=3,
                         is_final_episode=is_final_episode,
+                        recent_titles=recent_titles,
+                        recent_hooks=recent_hooks,
                     )
                     logger.warning(
                         "[GeminiStoryEngine] Recovered via relaxed novelty fallback on attempt %d",
@@ -416,6 +425,8 @@ class GeminiStoryEngine:
         blocked_tags_override: set[str] | None = None,
         overlap_fail_count: int = 2,
         is_final_episode: bool = True,
+        recent_titles: list[str] | None = None,
+        recent_hooks: list[str] | None = None,
     ) -> tuple[str, str, str, str]:
         # Summarize recent story openings so Gemini actively avoids them
         recent_openings = []
@@ -436,6 +447,18 @@ class GeminiStoryEngine:
                 "\n\nCONCEPT FRESHNESS: Avoid these recently used concepts: "
                 + ", ".join(sorted(blocked_tags))
                 + ". Use a different core mechanism and reveal."
+            )
+        recent_titles = recent_titles or []
+        recent_hooks = recent_hooks or []
+        if recent_titles:
+            avoid_block += (
+                "\n\nTITLE FRESHNESS: Do NOT reuse or closely resemble any of these previously "
+                "used titles: " + "; ".join(t[:70] for t in recent_titles[:20])
+            )
+        if recent_hooks:
+            avoid_block += (
+                "\n\nHOOK FRESHNESS: Do NOT reuse or closely resemble any of these previously "
+                "used hook sentences: " + "; ".join(h[:100] for h in recent_hooks[:20])
             )
         format_instruction = random.choice(STORY_FORMATS)
         is_cliffhanger_episode = bool(series_context.strip()) and not is_final_episode
@@ -564,6 +587,8 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
         valid_titles = [t for t in title_candidates if t and len(t) <= 58]
         title_seed = random.choice(valid_titles) if valid_titles else (title_candidates[0] or "")
 
+        self._enforce_title_hook_freshness(hook, title_seed, recent_hooks, recent_titles)
+
         scene_queries = [q.strip() for q in parsed.get("scene_queries", []) if isinstance(q, str) and q.strip()]
 
         word_count = len(script.split())
@@ -645,6 +670,37 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
         overlap = self._concept_tags(script) & blocked_tags
         if len(overlap) >= fail_overlap_count:
             raise ValueError(f"Concept overlap too high: {sorted(overlap)}")
+
+    def _normalize_for_dedup(self, text: str) -> str:
+        normalized = re.sub(r"[^a-z0-9\s]", "", (text or "").lower())
+        return re.sub(r"\s+", " ", normalized).strip()
+
+    def _is_near_duplicate(self, a: str, b: str, threshold: float = 0.9) -> bool:
+        tokens_a = set(self._normalize_for_dedup(a).split())
+        tokens_b = set(self._normalize_for_dedup(b).split())
+        if not tokens_a or not tokens_b:
+            return False
+        overlap = len(tokens_a & tokens_b) / min(len(tokens_a), len(tokens_b))
+        return overlap >= threshold
+
+    def _enforce_title_hook_freshness(
+        self, hook: str, title: str, recent_hooks: list[str], recent_titles: list[str]
+    ) -> None:
+        normalized_hook = self._normalize_for_dedup(hook)
+        for prior_hook in recent_hooks:
+            if normalized_hook and (
+                normalized_hook == self._normalize_for_dedup(prior_hook)
+                or self._is_near_duplicate(hook, prior_hook)
+            ):
+                raise ValueError(f"Hook too similar to a recently used hook: '{prior_hook[:80]}'")
+
+        normalized_title = self._normalize_for_dedup(title)
+        for prior_title in recent_titles:
+            if normalized_title and (
+                normalized_title == self._normalize_for_dedup(prior_title)
+                or self._is_near_duplicate(title, prior_title)
+            ):
+                raise ValueError(f"Title too similar to a recently used title: '{prior_title[:80]}'")
 
     def _is_concept_overlap_error(self, err: Exception | None) -> bool:
         if err is None:

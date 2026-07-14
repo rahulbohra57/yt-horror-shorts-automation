@@ -186,6 +186,61 @@ def test_expanded_concept_tags_catch_new_tropes():
     assert "static_noise" in tags
 
 
+def test_normalize_for_dedup_strips_punctuation_and_case():
+    engine = object.__new__(GeminiStoryEngine)
+    assert engine._normalize_for_dedup("The Attic Locket Had A Heartbeat!") == "the attic locket had a heartbeat"
+
+
+def test_is_near_duplicate_detects_high_token_overlap():
+    engine = object.__new__(GeminiStoryEngine)
+    a = "You hear knocking from inside your own walls."
+    b = "You hear knocking from inside your walls."
+    assert engine._is_near_duplicate(a, b) is True
+
+
+def test_is_near_duplicate_allows_distinct_text():
+    engine = object.__new__(GeminiStoryEngine)
+    a = "You hear knocking from inside your own walls."
+    b = "The babysitter called about kids you never had."
+    assert engine._is_near_duplicate(a, b) is False
+
+
+def test_enforce_title_hook_freshness_raises_on_duplicate_title():
+    engine = object.__new__(GeminiStoryEngine)
+    import pytest
+    with pytest.raises(ValueError):
+        engine._enforce_title_hook_freshness(
+            hook="A brand new hook line nobody has used before.",
+            title="The Attic Locket Had A Heartbeat",
+            recent_hooks=[],
+            recent_titles=["The Attic Locket Had A Heartbeat"],
+        )
+
+
+def test_enforce_title_hook_freshness_passes_on_distinct_content():
+    engine = object.__new__(GeminiStoryEngine)
+    engine._enforce_title_hook_freshness(
+        hook="A brand new hook line nobody has used before.",
+        title="A Completely Different Title",
+        recent_hooks=["You hear knocking from inside your own walls."],
+        recent_titles=["The Attic Locket Had A Heartbeat"],
+    )
+
+
+def test_call_gemini_retries_are_triggered_by_duplicate_hook():
+    engine = object.__new__(GeminiStoryEngine)
+    engine._niches = {"horror": {}}
+    engine._model = DummySeriesGeminiModel()
+
+    import pytest
+    with pytest.raises(ValueError):
+        engine._call_gemini(
+            "horror",
+            [],
+            recent_hooks=["You hear your own voice through the baby monitor."],
+        )
+
+
 def test_concept_tags_avoid_generic_false_positives():
     engine = object.__new__(GeminiStoryEngine)
 
