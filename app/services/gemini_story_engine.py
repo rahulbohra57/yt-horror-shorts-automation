@@ -251,6 +251,7 @@ class GeminiStoryEngine:
         series_context: str = "",
         series_episode_number: int | None = None,
         series_name: str = "",
+        is_final_episode: bool = True,
     ) -> dict:
         recent = list(recent_scripts or [])
         niche_data = self._niches.get(niche, {})
@@ -259,7 +260,7 @@ class GeminiStoryEngine:
         pexels_query = random.choice(pexels_queries)
 
         hook, script, cta, title_seed, scene_queries = self._generate_with_fallback(
-            niche, recent, motif, series_context, series_episode_number, series_name
+            niche, recent, motif, series_context, series_episode_number, series_name, is_final_episode
         )
 
         # Prepend story-specific scene queries so the pipeline fetches visually matched footage.
@@ -287,6 +288,7 @@ class GeminiStoryEngine:
         series_context: str = "",
         series_episode_number: int | None = None,
         series_name: str = "",
+        is_final_episode: bool = True,
     ) -> tuple[str, str, str, str, list]:
         last_error: Exception | None = None
         blocked_tags = self._recent_concept_tags(recent[:30])
@@ -303,6 +305,7 @@ class GeminiStoryEngine:
                     series_name=series_name,
                     blocked_tags_override=blocked_tags,
                     overlap_fail_count=2,
+                    is_final_episode=is_final_episode,
                 )
             except Exception as e:
                 last_error = e
@@ -325,6 +328,7 @@ class GeminiStoryEngine:
                         series_name=series_name,
                         blocked_tags_override=relaxed_blocked_tags,
                         overlap_fail_count=3,
+                        is_final_episode=is_final_episode,
                     )
                     logger.warning(
                         "[GeminiStoryEngine] Recovered via relaxed novelty fallback on attempt %d",
@@ -373,6 +377,7 @@ class GeminiStoryEngine:
         series_name: str = "",
         blocked_tags_override: set[str] | None = None,
         overlap_fail_count: int = 2,
+        is_final_episode: bool = True,
     ) -> tuple[str, str, str, str]:
         # Summarize recent story openings so Gemini actively avoids them
         recent_openings = []
@@ -395,6 +400,28 @@ class GeminiStoryEngine:
                 + ". Use a different core mechanism and reveal."
             )
         format_instruction = random.choice(STORY_FORMATS)
+        is_cliffhanger_episode = bool(series_context.strip()) and not is_final_episode
+        if is_cliffhanger_episode:
+            ending_requirement = (
+                "* End on a CLIFFHANGER, not a resolved twist — cut away at the moment of "
+                "maximum tension, right as the threat or mystery is about to be revealed. Do "
+                "NOT explain or resolve what is happening. The viewer must feel the story is "
+                "unfinished and urgently want to know what happens next."
+            )
+            beat4_instruction = (
+                "4. **Cliffhanger Cutoff (50-60 sec):** Escalate to the single most tense "
+                "moment, then STOP mid-threat. No resolution, no twist reveal — just dread and "
+                "an open question."
+            )
+        else:
+            ending_requirement = (
+                "* End with an **unexpected twist ending** that reframes everything — the "
+                "final line must be the most memorable and creepy line in the whole story."
+            )
+            beat4_instruction = (
+                "4. **Twist Ending (50-60 sec):** Single gut-punch line that reframes "
+                "everything. Must be the shortest, most memorable sentence in the story."
+            )
         continuity_block = ""
         if series_context.strip():
             continuity_block = (
@@ -425,7 +452,7 @@ The voiceover is read at a fast pace (+50% speed). At that speed, **130–140 wo
 * Include 1 main character only (unless necessary).
 * Use a MIX of character names — American (Jake, Emma, Ryan, Sarah, Tyler, Ashley, Michael, Jessica, Chris, Melissa), British (Oliver, Charlotte, Harry, Amelia, James, Sophie, George, Lily, Thomas, Isabelle), or Indian (Riya, Arjun, Meera, Kabir, Priya, Dev, Ananya, Vikram). Do NOT always use Indian names — vary nationality each story.
 * Story should feel realistic at first, then become deeply disturbing.
-* End with an **unexpected twist ending** that reframes everything — the final line must be the most memorable and creepy line in the whole story.
+{ending_requirement}
 * Story format for this generation: {format_instruction}
 * Keep the visual atmosphere compatible with this motif: {motif}
 * Avoid slow setup, backstory, or unnecessary details. Every sentence must earn its place.
@@ -438,7 +465,7 @@ The voiceover is read at a fast pace (+50% speed). At that speed, **130–140 wo
 1. **Hook (0–5 sec):** One or two short punchy sentences. Impossible situation. Immediate dread.
 2. **Build-up (5–40 sec):** Strange events escalate. Each sentence raises the stakes. Longer sentences build pressure.
 3. **Reveal (40–50 sec):** The terrifying truth surfaces. Short sharp sentences increase pace.
-4. **Twist Ending (50–60 sec):** Single gut-punch line that reframes everything. Must be the shortest, most memorable sentence in the story.
+{beat4_instruction}
 
 ### Tone:
 
@@ -487,7 +514,7 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
 
         script = self._close_incomplete_sentence(script)
 
-        cta = self._choose_cta(niche)
+        cta = random.choice(CTA_BUCKETS["cliffhanger"]) if is_cliffhanger_episode else self._choose_cta(niche)
         script = self._append_cta(script, cta)
 
         # Pick the best title from up to 3 variants Gemini returned.

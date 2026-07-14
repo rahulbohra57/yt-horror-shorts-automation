@@ -77,6 +77,64 @@ def test_script_is_forced_to_start_with_hook():
     assert script.startswith("I found my own obituary under the bed.")
 
 
+class DummySeriesGeminiResponse:
+    text = json.dumps({
+        "hook": "You hear your own voice through the baby monitor.",
+        "title": "The Voice In The Monitor",
+        "script": "You hear your own voice through the baby monitor. Sarah checked the nursery twice, but it was empty. The voice kept repeating the same six words. She pressed record to prove she was imagining it. When she played it back, a second voice answered hers. It was already inside the house.",
+    })
+
+
+class DummySeriesGeminiModel:
+    def generate_content(self, *args, **kwargs):
+        return DummySeriesGeminiResponse()
+
+
+def test_non_final_series_episode_gets_cliffhanger_ending_and_cta():
+    engine = object.__new__(GeminiStoryEngine)
+    engine._niches = {"horror": {}}
+    engine._model = DummySeriesGeminiModel()
+
+    hook, script, cta, title_seed, scene_queries = engine._call_gemini(
+        "horror",
+        [],
+        series_context="EP1 TITLE: The Voice\nEP1 SUMMARY: A voice answered back.",
+        series_episode_number=2,
+        series_name="The Monitor Files",
+        is_final_episode=False,
+    )
+
+    from app.services.gemini_story_engine import CTA_BUCKETS
+    assert cta in CTA_BUCKETS["cliffhanger"]
+
+
+def test_final_series_episode_keeps_normal_cta_pool():
+    engine = object.__new__(GeminiStoryEngine)
+    engine._niches = {"horror": {"ctas": ["Follow for the next nightmare."]}}
+    engine._model = DummySeriesGeminiModel()
+
+    hook, script, cta, title_seed, scene_queries = engine._call_gemini(
+        "horror",
+        [],
+        series_context="EP1 TITLE: The Voice\nEP1 SUMMARY: A voice answered back.",
+        series_episode_number=3,
+        series_name="The Monitor Files",
+        is_final_episode=True,
+    )
+
+    assert cta == "Follow for the next nightmare."
+
+
+def test_standalone_short_defaults_to_final_episode_behavior():
+    engine = object.__new__(GeminiStoryEngine)
+    engine._niches = {"horror": {"ctas": ["Follow for the next nightmare."]}}
+    engine._model = DummySeriesGeminiModel()
+
+    hook, script, cta, title_seed, scene_queries = engine._call_gemini("horror", [])
+
+    assert cta == "Follow for the next nightmare."
+
+
 def test_concept_tags_avoid_generic_false_positives():
     engine = object.__new__(GeminiStoryEngine)
 
