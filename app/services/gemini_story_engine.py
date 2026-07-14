@@ -280,6 +280,30 @@ class GeminiStoryEngine:
             "seo": self._generate_seo(title, niche),
         }
 
+    def generate_series_title(self, niche: str, hook: str, script: str) -> str:
+        prompt = (
+            "You are naming a new horror/mystery YouTube Shorts story series based on its "
+            "first episode.\n"
+            f"Genre: {niche}\n"
+            f"Episode 1 hook: {hook}\n"
+            f"Episode 1 story: {script}\n\n"
+            "Create ONE short, catchy series title (2-5 words) that sounds like a real "
+            "streaming show name, grounded in this episode's premise, setting, or central "
+            "object/threat. Do NOT use generic words like 'Horror Series' or 'Episode'. "
+            "No quotes, no markdown, no trailing punctuation.\n\n"
+            "Respond with ONLY the title text, nothing else."
+        )
+        response = self._model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(temperature=0.9, max_output_tokens=32),
+        )
+        title = (response.text or "").strip()
+        title = re.sub(r'["\'`*_]+', "", title)
+        title = re.sub(r"\s+", " ", title).strip(" .,:;-")
+        if not title or len(title) > 60:
+            raise ValueError(f"Invalid series title generated: '{title}'")
+        return title
+
     def _generate_with_fallback(
         self,
         niche: str,

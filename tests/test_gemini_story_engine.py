@@ -135,6 +135,40 @@ def test_standalone_short_defaults_to_final_episode_behavior():
     assert cta == "Follow for the next nightmare."
 
 
+class DummyTitleGeminiResponse:
+    text = "The Sleepwood Tapes"
+
+
+class DummyTitleGeminiModel:
+    def generate_content(self, *args, **kwargs):
+        return DummyTitleGeminiResponse()
+
+
+class DummyEmptyTitleGeminiModel:
+    def generate_content(self, *args, **kwargs):
+        class R:
+            text = "   "
+        return R()
+
+
+def test_generate_series_title_returns_clean_title():
+    engine = object.__new__(GeminiStoryEngine)
+    engine._model = DummyTitleGeminiModel()
+
+    title = engine.generate_series_title("horror", "You hear your own voice.", "A short story.")
+
+    assert title == "The Sleepwood Tapes"
+
+
+def test_generate_series_title_raises_on_empty_response():
+    engine = object.__new__(GeminiStoryEngine)
+    engine._model = DummyEmptyTitleGeminiModel()
+
+    import pytest
+    with pytest.raises(ValueError):
+        engine.generate_series_title("horror", "You hear your own voice.", "A short story.")
+
+
 def test_concept_tags_avoid_generic_false_positives():
     engine = object.__new__(GeminiStoryEngine)
 
