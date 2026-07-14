@@ -13,7 +13,7 @@ from app.services.youtube_service import YouTubeService
 from app.services.telegram_service import TelegramService
 from app.services.gdrive_service import GDriveService
 from app.services.cloudinary_service import CloudinaryService
-from app.services.series_service import SeriesService
+from app.services.series_service import SeriesService, SeriesAssignment
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ class Pipeline:
         )
         self.series = SeriesService()
 
-    async def run(self, niche: str, job_id: str, session, upload: bool = True, series_mode: bool = False) -> dict:
+    async def run(self, niche: str, job_id: str, session, upload: bool = True, series_mode: bool = False, allow_new_series: bool = False) -> dict:
         short = session.query(Short).filter_by(id=int(job_id)).first()
 
         def update_status(status, **kwargs):
@@ -73,7 +73,7 @@ class Pipeline:
             effective_niche = niche
             if short and series_mode:
                 try:
-                    assignment = self.series.assign_short(session, short)
+                    assignment = self.series.assign_short(session, short, allow_new_series=allow_new_series)
                     effective_niche = short.niche
                     if assignment:
                         continuity_context = self.series.get_series_continuity_context(
@@ -88,29 +88,12 @@ class Pipeline:
                 except Exception as series_err:
                     logger.warning("[%s] Series assignment skipped: %s", job_id, series_err)
 
+            is_final_episode = self._compute_is_final_episode(assignment)
+
             logger.info(f"[{job_id}] Generating story for niche={effective_niche}")
             update_status(JobStatus.GENERATING)
             await self.telegram.notify_started(effective_niche, job_id)
-            recent_scripts = []
-            try:
-                rows = (
-                    session.query(Short.script)
-                    .filter(Short.niche == effective_niche, Short.script.isnot(None), Short.id != int(job_id))
-                    .order_by(Short.created_at.desc())
-                    .limit(40)
-                    .all()
-                )
-                for row in rows:
-                    if isinstance(row, str):
-                        recent_scripts.append(row)
-                    elif isinstance(row, (tuple, list)) and row:
-                        recent_scripts.append(row[0])
-                    else:
-                        value = getattr(row, "script", None)
-                        if value:
-                            recent_scripts.append(value)
-            except Exception as history_err:
-                logger.warning(f"[{job_id}] Failed to load recent scripts: {history_err}")
+            recent_scripts, recent_titles, recent_hooks = self._load_recent_context(session, job_id)
 
             story = self.story.generate(
                 effective_niche,
@@ -118,8 +101,12 @@ class Pipeline:
                 series_context=continuity_context,
                 series_episode_number=assignment.episode_number if assignment else None,
                 series_name=assignment.series_name if assignment else "",
+                is_final_episode=is_final_episode,
+                recent_titles=recent_titles,
+                recent_hooks=recent_hooks,
             )
             if assignment:
+                assignment = self._maybe_rename_series(session, job_id, assignment, effective_niche, story)
                 story = self._apply_series_title_prefix(story, assignment.title_prefix, assignment.episode_number)
             story = self._ensure_cta_in_script(story)
 
@@ -240,6 +227,71 @@ class Pipeline:
             logger.warning("CTA missing from generated script; appending before TTS")
             story = {**story, "script": f"{script} {cta}".strip()}
         return story
+
+    @staticmethod
+    def _load_recent_context(session, job_id: str) -> tuple[list[str], list[str], list[str]]:
+        recent_scripts: list[str] = []
+        try:
+            rows = (
+                session.query(Short.script)
+                .filter(Short.script.isnot(None), Short.id != int(job_id))
+                .order_by(Short.created_at.desc())
+                .limit(80)
+                .all()
+            )
+            for row in rows:
+                if isinstance(row, str):
+                    recent_scripts.append(row)
+                elif isinstance(row, (tuple, list)) and row:
+                    recent_scripts.append(row[0])
+                else:
+                    value = getattr(row, "script", None)
+                    if value:
+                        recent_scripts.append(value)
+        except Exception as history_err:
+            logger.warning(f"[{job_id}] Failed to load recent scripts: {history_err}")
+
+        recent_titles: list[str] = []
+        recent_hooks: list[str] = []
+        try:
+            meta_rows = (
+                session.query(Short.title, Short.hook)
+                .filter(Short.id != int(job_id))
+                .order_by(Short.created_at.desc())
+                .limit(200)
+                .all()
+            )
+            for title_val, hook_val in meta_rows:
+                if title_val:
+                    recent_titles.append(title_val)
+                if hook_val:
+                    recent_hooks.append(hook_val)
+        except Exception as meta_err:
+            logger.warning(f"[{job_id}] Failed to load recent titles/hooks: {meta_err}")
+
+        return recent_scripts, recent_titles, recent_hooks
+
+    @staticmethod
+    def _compute_is_final_episode(assignment) -> bool:
+        return assignment is None or assignment.episode_number >= assignment.planned_episodes
+
+    def _maybe_rename_series(self, session, job_id: str, assignment, effective_niche: str, story: dict):
+        if not assignment or assignment.episode_number != 1:
+            return assignment
+        try:
+            new_name = self.story.generate_series_title(effective_niche, story["hook"], story["script"])
+            self.series.rename_series(session, assignment.series_id, new_name)
+            return SeriesAssignment(
+                series_id=assignment.series_id,
+                series_name=new_name,
+                title_prefix=new_name,
+                playlist_name=f"{new_name} Series",
+                episode_number=assignment.episode_number,
+                planned_episodes=assignment.planned_episodes,
+            )
+        except Exception as rename_err:
+            logger.warning(f"[{job_id}] Series rename skipped: {rename_err}")
+            return assignment
 
     @staticmethod
     def _apply_series_title_prefix(story: dict, prefix: str, episode_number: int) -> dict:
