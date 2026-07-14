@@ -2,6 +2,8 @@ import asyncio
 import logging
 import random
 import threading
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from app.core.config import settings
@@ -53,11 +55,30 @@ class DailyScheduler:
         niches = [x for x in raw if x in valid]
         return niches or DEFAULT_NICHES
 
+    def _series_slot(self) -> tuple[int, int]:
+        times = self._parse_schedule_times()
+        raw = (settings.SERIES_SLOT_TIME or "").strip()
+        try:
+            hour_str, minute_str = raw.split(":")
+            candidate = (int(hour_str), int(minute_str))
+            if candidate in times:
+                return candidate
+        except Exception:
+            pass
+        return times[0]
+
+    def _is_series_start_day(self, now: datetime | None = None) -> bool:
+        current = now or datetime.now(ZoneInfo(settings.SCHEDULE_TIMEZONE))
+        return current.weekday() == 0
+
     def start(self):
+        series_slot = self._series_slot()
         for hour, minute in self._parse_schedule_times():
             job_id = f"scheduled_short_{hour:02d}{minute:02d}"
+            is_series_slot = (hour, minute) == series_slot
             self.scheduler.add_job(
                 self._run_daily_job,
+                args=[is_series_slot],
                 trigger=CronTrigger(hour=hour, minute=minute),
                 id=job_id,
                 replace_existing=True,
@@ -68,11 +89,12 @@ class DailyScheduler:
         self.scheduler.start()
         readable = ", ".join(f"{h:02d}:{m:02d}" for h, m in self._parse_schedule_times())
         logger.info(
-            "Scheduler started: times=%s timezone=%s niches=%s upload=%s",
+            "Scheduler started: times=%s timezone=%s niches=%s upload=%s series_slot=%02d:%02d",
             readable,
             settings.SCHEDULE_TIMEZONE,
             self._niches(),
             settings.SCHEDULE_UPLOAD,
+            series_slot[0], series_slot[1],
         )
 
     def stop(self):
@@ -119,7 +141,7 @@ class DailyScheduler:
         )
         return chosen
 
-    def _run_daily_job(self):
+    def _run_daily_job(self, is_series_slot: bool = False):
         if not self._run_lock.acquire(blocking=False):
             logger.warning("Scheduled job skipped: previous run still in progress")
             return
@@ -129,7 +151,11 @@ class DailyScheduler:
         session = SessionFactory()
         try:
             niche = self._pick_niche(session)
-            logger.info(f"Scheduled job triggered: niche={niche}")
+            allow_new_series = is_series_slot and self._is_series_start_day()
+            logger.info(
+                "Scheduled job triggered: niche=%s series_slot=%s allow_new_series=%s",
+                niche, is_series_slot, allow_new_series,
+            )
             short = Short(niche=niche, status=JobStatus.PENDING)
             session.add(short)
             session.commit()
@@ -141,6 +167,8 @@ class DailyScheduler:
                     job_id=str(short.id),
                     session=session,
                     upload=settings.SCHEDULE_UPLOAD,
+                    series_mode=is_series_slot,
+                    allow_new_series=allow_new_series,
                 )
             )
         except Exception as e:
