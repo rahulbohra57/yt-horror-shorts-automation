@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.database import get_engine, get_session_factory, init_db
 from app.core.models import JobStatus, Short
 from app.services.pipeline import Pipeline
+from app.services.series_service import SeriesService, is_series_start_day
 
 logging.basicConfig(
     level=logging.INFO,
@@ -70,6 +71,42 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+def run_once(session, niche_arg: str, upload: bool, mode: str) -> dict:
+    """Runs one scheduled job against the given session. Returns a JSON-serializable result dict."""
+    is_series = mode == "series"
+    allow_new_series = is_series and is_series_start_day(settings.SCHEDULE_TIMEZONE)
+
+    if is_series:
+        series_service = SeriesService()
+        if not series_service.has_active_or_startable_series(session, allow_new_series):
+            logger.info(
+                "Scheduled job skipped: no active series and today is not a series-start day"
+            )
+            return {"status": "skipped"}
+
+    niche = _pick_auto_niche(session) if niche_arg == "auto" else niche_arg
+    short = Short(niche=niche, status=JobStatus.PENDING)
+    session.add(short)
+    session.commit()
+    session.refresh(short)
+
+    logger.info(
+        "Starting scheduled pipeline: niche=%s short_id=%s upload=%s mode=%s",
+        niche, short.id, upload, mode,
+    )
+    result = asyncio.run(
+        Pipeline().run(
+            niche=niche,
+            job_id=str(short.id),
+            session=session,
+            upload=upload,
+            series_mode=is_series,
+            allow_new_series=allow_new_series,
+        )
+    )
+    return {"short_id": short.id, "niche": niche, "mode": mode, "result": result}
+
+
 def main() -> int:
     args = parse_args()
     upload = args.upload.lower() == "true"
@@ -79,33 +116,11 @@ def main() -> int:
     SessionFactory = get_session_factory(engine)
     session = SessionFactory()
     try:
-        niche = _pick_auto_niche(session) if args.niche == "auto" else args.niche
-        short = Short(niche=niche, status=JobStatus.PENDING)
-        session.add(short)
-        session.commit()
-        session.refresh(short)
-
-        is_series = args.mode == "series"
-        logger.info(
-            "Starting scheduled pipeline: niche=%s short_id=%s upload=%s mode=%s",
-            niche, short.id, upload, args.mode,
-        )
-        result = asyncio.run(
-            Pipeline().run(
-                niche=niche,
-                job_id=str(short.id),
-                session=session,
-                upload=upload,
-                series_mode=is_series,
-            )
-        )
-        print(
-            json.dumps(
-                {"short_id": short.id, "niche": niche, "mode": args.mode, "result": result},
-                ensure_ascii=True,
-            )
-        )
-        if result.get("status") != "done":
+        output = run_once(session, args.niche, upload, args.mode)
+        print(json.dumps(output, ensure_ascii=True))
+        if output.get("status") == "skipped":
+            return 0
+        if output.get("result", {}).get("status") != "done":
             return 1
         return 0
     finally:
