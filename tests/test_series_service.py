@@ -70,3 +70,26 @@ def test_rename_series_updates_name_prefix_and_playlist_name(tmp_path):
     assert series.name == "The Sleepwood Tapes"
     assert series.title_prefix == "The Sleepwood Tapes"
     assert series.playlist_name == "The Sleepwood Tapes Series"
+
+
+def test_has_active_or_startable_series_true_when_series_active(tmp_path):
+    session = _make_session(tmp_path)
+    service = SeriesService()
+    short = _make_short(session)
+    service.assign_short(session, short, allow_new_series=True)
+
+    assert service.has_active_or_startable_series(session, allow_new_series=False) is True
+
+
+def test_has_active_or_startable_series_true_when_no_active_series_but_new_allowed(tmp_path):
+    session = _make_session(tmp_path)
+    service = SeriesService()
+
+    assert service.has_active_or_startable_series(session, allow_new_series=True) is True
+
+
+def test_has_active_or_startable_series_false_when_no_active_series_and_new_not_allowed(tmp_path):
+    session = _make_session(tmp_path)
+    service = SeriesService()
+
+    assert service.has_active_or_startable_series(session, allow_new_series=False) is False

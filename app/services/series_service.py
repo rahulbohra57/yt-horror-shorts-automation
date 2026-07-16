@@ -111,6 +111,12 @@ class SeriesService:
         series = session.query(StorySeries).filter(StorySeries.id == series_id).first()
         return series.playlist_id if series else None
 
+    def has_active_or_startable_series(self, session, allow_new_series: bool) -> bool:
+        active = self._get_active_series(session)
+        if active:
+            return True
+        return allow_new_series
+
     def rename_series(self, session, series_id: int, new_name: str) -> None:
         new_name = (new_name or "").strip()
         if not new_name:
