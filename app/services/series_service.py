@@ -1,6 +1,7 @@
 import random
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from app.core.models import SeriesEpisode, SeriesStatus, Short, StorySeries
 
@@ -25,6 +26,12 @@ class SeriesAssignment:
 
 def _utcnow_naive() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def is_series_start_day(timezone_name: str, now: datetime | None = None) -> bool:
+    """True on the one weekday new series are allowed to start (Monday), in the given tz."""
+    current = now or datetime.now(ZoneInfo(timezone_name))
+    return current.weekday() == 0
 
 
 class SeriesService:

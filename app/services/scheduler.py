@@ -3,14 +3,13 @@ import logging
 import random
 import threading
 from datetime import datetime
-from zoneinfo import ZoneInfo
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from app.core.config import settings
 from app.core.database import get_engine, get_session_factory
 from app.core.models import Short, JobStatus
 from app.services.pipeline import Pipeline
-from app.services.series_service import SeriesService
+from app.services.series_service import SeriesService, is_series_start_day
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +69,7 @@ class DailyScheduler:
         return times[0]
 
     def _is_series_start_day(self, now: datetime | None = None) -> bool:
-        current = now or datetime.now(ZoneInfo(settings.SCHEDULE_TIMEZONE))
-        return current.weekday() == 0
+        return is_series_start_day(settings.SCHEDULE_TIMEZONE, now=now)
 
     def start(self):
         series_slot = self._series_slot()

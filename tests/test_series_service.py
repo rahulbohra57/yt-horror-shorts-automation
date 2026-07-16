@@ -1,6 +1,9 @@
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from app.core.database import init_db, get_session_factory
 from app.core.models import JobStatus, Short, SeriesStatus, StorySeries
-from app.services.series_service import SeriesService, SERIES_EPISODE_RANGE
+from app.services.series_service import SeriesService, SERIES_EPISODE_RANGE, is_series_start_day
 
 
 def _make_session(tmp_path):
@@ -93,3 +96,13 @@ def test_has_active_or_startable_series_false_when_no_active_series_and_new_not_
     service = SeriesService()
 
     assert service.has_active_or_startable_series(session, allow_new_series=False) is False
+
+
+def test_is_series_start_day_true_on_monday():
+    monday = datetime(2026, 7, 13, 12, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    assert is_series_start_day("Asia/Kolkata", now=monday) is True
+
+
+def test_is_series_start_day_false_on_tuesday():
+    tuesday = datetime(2026, 7, 14, 12, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    assert is_series_start_day("Asia/Kolkata", now=tuesday) is False
