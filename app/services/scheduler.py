@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.database import get_engine, get_session_factory
 from app.core.models import Short, JobStatus
 from app.services.pipeline import Pipeline
+from app.services.series_service import SeriesService
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ class DailyScheduler:
     def __init__(self):
         self.scheduler = BackgroundScheduler(timezone=settings.SCHEDULE_TIMEZONE)
         self._run_lock = threading.Lock()
+        self.series = SeriesService()
 
     def _parse_schedule_times(self) -> list[tuple[int, int]]:
         times = []
@@ -150,8 +152,15 @@ class DailyScheduler:
         SessionFactory = get_session_factory(engine)
         session = SessionFactory()
         try:
-            niche = self._pick_niche(session)
             allow_new_series = is_series_slot and self._is_series_start_day()
+
+            if is_series_slot and not self.series.has_active_or_startable_series(session, allow_new_series):
+                logger.info(
+                    "Scheduled job skipped: no active series and today is not a series-start day"
+                )
+                return
+
+            niche = self._pick_niche(session)
             logger.info(
                 "Scheduled job triggered: niche=%s series_slot=%s allow_new_series=%s",
                 niche, is_series_slot, allow_new_series,

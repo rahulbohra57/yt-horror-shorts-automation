@@ -62,6 +62,7 @@ def test_run_daily_job_passes_series_mode_and_allow_new_series_on_series_slot():
         scheduler = DailyScheduler()
         scheduler._pick_niche = MagicMock(return_value="horror")
         scheduler._is_series_start_day = MagicMock(return_value=True)
+        scheduler.series.has_active_or_startable_series = MagicMock(return_value=True)
 
         scheduler._run_daily_job(is_series_slot=True)
 
@@ -91,3 +92,48 @@ def test_run_daily_job_standalone_slot_never_allows_new_series():
         _, kwargs = MockPipeline.return_value.run.call_args
         assert kwargs["series_mode"] is False
         assert kwargs["allow_new_series"] is False
+
+
+def test_run_daily_job_skips_when_series_slot_has_nothing_postable():
+    from app.services.scheduler import DailyScheduler
+
+    with patch("app.services.scheduler.get_engine"), \
+         patch("app.services.scheduler.get_session_factory") as mock_factory, \
+         patch("app.services.scheduler.Pipeline") as MockPipeline, \
+         patch("app.services.scheduler.settings.SCHEDULE_UPLOAD", True):
+
+        mock_session = MagicMock()
+        mock_factory.return_value.return_value = mock_session
+        MockPipeline.return_value.run = MagicMock(return_value=_async_none())
+
+        scheduler = DailyScheduler()
+        scheduler._pick_niche = MagicMock(return_value="horror")
+        scheduler._is_series_start_day = MagicMock(return_value=False)
+        scheduler.series.has_active_or_startable_series = MagicMock(return_value=False)
+
+        scheduler._run_daily_job(is_series_slot=True)
+
+        MockPipeline.return_value.run.assert_not_called()
+        mock_session.add.assert_not_called()
+
+
+def test_run_daily_job_runs_when_series_slot_has_active_series():
+    from app.services.scheduler import DailyScheduler
+
+    with patch("app.services.scheduler.get_engine"), \
+         patch("app.services.scheduler.get_session_factory") as mock_factory, \
+         patch("app.services.scheduler.Pipeline") as MockPipeline, \
+         patch("app.services.scheduler.settings.SCHEDULE_UPLOAD", True):
+
+        mock_session = MagicMock()
+        mock_factory.return_value.return_value = mock_session
+        MockPipeline.return_value.run = MagicMock(return_value=_async_none())
+
+        scheduler = DailyScheduler()
+        scheduler._pick_niche = MagicMock(return_value="horror")
+        scheduler._is_series_start_day = MagicMock(return_value=False)
+        scheduler.series.has_active_or_startable_series = MagicMock(return_value=True)
+
+        scheduler._run_daily_job(is_series_slot=True)
+
+        MockPipeline.return_value.run.assert_called_once()
