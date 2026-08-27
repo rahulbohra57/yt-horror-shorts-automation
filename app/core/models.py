@@ -27,6 +27,7 @@ class Short(Base):
     title = Column(String(256))
     script = Column(Text)
     hook = Column(String(512))
+    cta = Column(String(512))
     pexels_query = Column(String(256))
     video_path = Column(String(512))
     youtube_url = Column(String(512))

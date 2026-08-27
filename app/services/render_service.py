@@ -1,5 +1,5 @@
+import json
 import logging
-import math
 import random
 import re
 import subprocess
@@ -19,6 +19,50 @@ CAPTION_WORDS_PER_SEGMENT = 2
 
 _BG_AUDIO_DIR = Path(__file__).parent.parent.parent / "background_audio"
 _SUSPENSE_FOLDER = _BG_AUDIO_DIR / "suspense"
+_TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
+
+# Per-niche caption style, keyed to presets in templates/captions.json.
+# High-energy niches get the bolder yellow treatment; the rest stay on the
+# readable default white style.
+_NICHE_CAPTION_STYLE = {
+    "slasher": "bold_yellow",
+    "supernatural": "bold_yellow",
+    "folk_horror": "bold_yellow",
+}
+
+# Caption chunks containing any of these words are rendered in the accent
+# color (regardless of the base style) to punch up the scariest beats.
+_IMPACT_WORDS = {
+    "dead", "death", "died", "kill", "killed", "killer", "blood", "scream",
+    "screamed", "run", "help", "hide", "trapped", "watching", "behind",
+    "gone", "missing", "afraid", "terrified", "horror", "ghost", "demon",
+    "curse", "cursed", "monster", "attack", "danger", "bleeding", "silence",
+}
+
+_ACCENT_HEX = "#FFD232"                  # gold/amber, used in SRT <font color> tags
+_ACCENT_COLOR_RGB = (255, 210, 50, 255)  # same color as Pillow RGBA
+
+
+def _load_caption_styles() -> dict:
+    try:
+        with open(_TEMPLATES_DIR / "captions.json") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+_CAPTION_STYLES = _load_caption_styles()
+_DEFAULT_CAPTION_STYLE = {
+    "font_size": 56, "color": "white", "outline_color": "black",
+    "outline_width": 3, "alignment": 2, "margin_v": 80,
+}
+
+_ASS_COLOR_NAMES = {
+    "white": "&H00FFFFFF", "black": "&H00000000", "yellow": "&H0000FFFF",
+}
+_PIL_COLOR_NAMES = {
+    "white": (255, 255, 255, 255), "black": (0, 0, 0, 255), "yellow": (255, 220, 0, 255),
+}
 
 # (font_path, index) — prefer bold variants
 _FONT_CANDIDATES = [
@@ -53,12 +97,13 @@ class RenderService:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def render(self, video_paths: list[str], audio_path: str, script: str, job_id: str, word_timings: list = None, niche: str = "", cta: str = "") -> str:
+    def render(self, video_paths: list[str], audio_path: str, script: str, job_id: str, word_timings: list = None, niche: str = "", cta: str = "", hook: str = "") -> str:
         """
         Full pipeline:
           1. Merge/crop background video clips to 1080x1920 at audio duration
-          2. Burn-in captions (SRT via libass if available, otherwise Pillow overlay)
-          3. Normalize audio loudness to -16 LUFS, mix in background music with ducking
+          2. Burn in a bold hook-text card over the opening ~1.6s for scroll-stopping impact
+          3. Burn-in captions (SRT via libass if available, otherwise Pillow overlay)
+          4. Normalize audio loudness to -16 LUFS, mix in background music with ducking
         Returns path to the final MP4.
         """
         output_path = self.output_dir / f"{job_id}.mp4"
@@ -67,7 +112,8 @@ class RenderService:
             logger.info(f"Background music: {Path(music_path).name}")
         with tempfile.TemporaryDirectory() as tmp:
             merged_bg = self._merge_and_crop_videos(video_paths, audio_path, tmp)
-            captioned = self._add_captions(merged_bg, script, audio_path, tmp, word_timings, cta=cta)
+            merged_bg = self._add_hook_overlay(merged_bg, hook, tmp)
+            captioned = self._add_captions(merged_bg, script, audio_path, tmp, word_timings, cta=cta, niche=niche)
             self._normalize_audio(captioned, str(output_path), music_path=music_path)
         logger.info(f"Rendered: {output_path}")
         return str(output_path)
@@ -93,15 +139,25 @@ class RenderService:
         DX = W_LARGE - TARGET_W  # horizontal overflow pixels
         DY = H_LARGE - TARGET_H  # vertical overflow pixels
 
-        # Trim each source video to a random 5-7 s clip from a random start point
-        trimmed = []
-        for i, vp in enumerate(video_paths):
+        # Cache each source video's duration once
+        src_durations = {}
+        for vp in video_paths:
             try:
-                src_dur = self._get_duration(vp)
+                src_durations[vp] = self._get_duration(vp)
             except Exception:
-                src_dur = 30.0
-            clip_dur = random.uniform(5, 7)
-            clip_dur = min(clip_dur, src_dur)
+                src_durations[vp] = 30.0
+
+        # Cut fresh clips until the audio duration is covered. Sources are cycled
+        # round-robin and re-cut with a new random window each pass, so a short
+        # scene pool doesn't visibly replay the exact same frames back-to-back.
+        clips_to_concat = []
+        total_clip_dur = 0.0
+        target_dur = audio_duration + 2.0
+        i = 0
+        while total_clip_dur < target_dur:
+            vp = video_paths[i % len(video_paths)]
+            src_dur = src_durations[vp]
+            clip_dur = min(random.uniform(5, 7), src_dur)
             max_start = max(0.0, src_dur - clip_dur - 0.5)
             start = random.uniform(0, max_start) if max_start > 0 else 0.0
             t = Path(tmp) / f"clip_{i}.mp4"
@@ -124,14 +180,9 @@ class RenderService:
                 "-an", "-y", str(t)
             ]
             self._run(cmd)
-            trimmed.append(str(t))
-
-        # Loop the clip sequence until it covers the full audio duration
-        total_clip_dur = sum(
-            self._get_duration(c) for c in trimmed
-        )
-        loops = math.ceil(audio_duration / total_clip_dur) if total_clip_dur > 0 else 1
-        clips_to_concat = trimmed * loops
+            clips_to_concat.append(str(t))
+            total_clip_dur += clip_dur
+            i += 1
 
         concat_list = Path(tmp) / "concat.txt"
         with open(concat_list, "w") as f:
@@ -149,35 +200,129 @@ class RenderService:
         return str(out)
 
     # ------------------------------------------------------------------
+    # Hook text overlay — bold title-card text burned over the opening frames
+    # so the scroll-stopping hook lands before/independent of caption timing.
+    # ------------------------------------------------------------------
+
+    _HOOK_OVERLAY_SECONDS = 1.6
+
+    def _add_hook_overlay(self, video_path: str, hook: str, tmp: str) -> str:
+        hook = (hook or "").strip()
+        if not hook:
+            return video_path
+        try:
+            from PIL import Image
+
+            png_path = Path(tmp) / "hook_card.png"
+            font = self._load_hook_font()
+            self._render_hook_frame(hook, font, png_path)
+
+            out = Path(tmp) / "hooked.mp4"
+            self._run([
+                "ffmpeg", "-i", video_path, "-i", str(png_path),
+                "-filter_complex",
+                f"[0:v][1:v]overlay=0:0:enable='lte(t,{self._HOOK_OVERLAY_SECONDS})'[vout]",
+                "-map", "[vout]",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-threads", "1",
+                "-an", "-y", str(out),
+            ])
+            return str(out)
+        except Exception as e:
+            logger.warning(f"Hook overlay failed ({e}), rendering without it")
+            return video_path
+
+    def _load_hook_font(self):
+        from PIL import ImageFont
+        if _SYSTEM_FONT:
+            font_path, font_idx = _SYSTEM_FONT
+            try:
+                return ImageFont.truetype(font_path, 76, index=font_idx)
+            except Exception:
+                pass
+        return ImageFont.load_default(size=76)
+
+    def _render_hook_frame(self, hook: str, font, path: Path) -> None:
+        from PIL import Image, ImageDraw
+        img = Image.new("RGBA", (TARGET_W, TARGET_H), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        lines = self._wrap_words(hook, max_chars=20, max_lines=4)
+        line_h = 76 + 14
+        total_h = line_h * len(lines)
+        y_start = int(TARGET_H * 0.22)
+
+        line_widths = []
+        for ln in lines:
+            try:
+                bbox = draw.textbbox((0, 0), ln, font=font)
+                line_widths.append(bbox[2] - bbox[0])
+            except Exception:
+                line_widths.append(len(ln) * 40)
+        max_w = max(line_widths) if line_widths else TARGET_W // 2
+
+        pad_x, pad_y = 36, 24
+        bar_x0 = (TARGET_W - max_w) // 2 - pad_x
+        bar_y0 = y_start - pad_y
+        bar_x1 = (TARGET_W + max_w) // 2 + pad_x
+        bar_y1 = y_start + total_h + pad_y
+        overlay = Image.new("RGBA", (TARGET_W, TARGET_H), (0, 0, 0, 0))
+        ImageDraw.Draw(overlay).rectangle([(bar_x0, bar_y0), (bar_x1, bar_y1)], fill=(0, 0, 0, 150))
+        img = Image.alpha_composite(img, overlay)
+        draw = ImageDraw.Draw(img)
+
+        for li, ln in enumerate(lines):
+            try:
+                bbox = draw.textbbox((0, 0), ln, font=font)
+                text_w = bbox[2] - bbox[0]
+            except Exception:
+                text_w = len(ln) * 40
+            x = (TARGET_W - text_w) // 2
+            y = y_start + li * line_h
+            try:
+                draw.text((x, y), ln, font=font, fill=(255, 255, 255, 255),
+                          stroke_width=4, stroke_fill=(0, 0, 0, 255))
+            except TypeError:
+                for dx, dy in [(-4, -4), (4, -4), (-4, 4), (4, 4), (0, -4), (0, 4), (-4, 0), (4, 0)]:
+                    draw.text((x + dx, y + dy), ln, font=font, fill=(0, 0, 0, 255))
+                draw.text((x, y), ln, font=font, fill=(255, 255, 255, 255))
+        img.save(str(path))
+
+    # ------------------------------------------------------------------
     # Step 2: add captions
     # ------------------------------------------------------------------
 
-    def _add_captions(self, video_path: str, script: str, audio_path: str, tmp: str, word_timings: list = None, cta: str = "") -> str:
+    def _style_for_niche(self, niche: str) -> dict:
+        style_name = _NICHE_CAPTION_STYLE.get(niche, "default")
+        return _CAPTION_STYLES.get(style_name) or _DEFAULT_CAPTION_STYLE
+
+    def _add_captions(self, video_path: str, script: str, audio_path: str, tmp: str, word_timings: list = None, cta: str = "", niche: str = "") -> str:
+        style = self._style_for_niche(niche)
         if _SUBTITLES_AVAILABLE:
             try:
-                return self._add_captions_srt(video_path, script, audio_path, tmp, word_timings, cta=cta)
+                return self._add_captions_srt(video_path, script, audio_path, tmp, word_timings, cta=cta, style=style)
             except Exception as e:
                 logger.warning(f"SRT captions failed ({e}), falling back to drawtext")
         try:
-            return self._add_captions_drawtext(video_path, script, audio_path, tmp, word_timings, cta=cta)
+            return self._add_captions_drawtext(video_path, script, audio_path, tmp, word_timings, cta=cta, style=style)
         except Exception as e:
             logger.warning(f"drawtext captions failed ({e}), muxing without captions")
             return self._mux_audio_only(video_path, audio_path, tmp)
 
     # --- libass / SRT path (when subtitles filter is available) ---
 
-    def _add_captions_srt(self, video_path: str, script: str, audio_path: str, tmp: str, word_timings: list = None, cta: str = "") -> str:
+    def _add_captions_srt(self, video_path: str, script: str, audio_path: str, tmp: str, word_timings: list = None, cta: str = "", style: dict = None) -> str:
+        style = style or _DEFAULT_CAPTION_STYLE
         out = Path(tmp) / "captioned.mp4"
         srt_path = self._generate_srt(script, audio_path, tmp, word_timings, cta=cta)
         escaped_srt = str(srt_path).replace("\\", "/").replace(":", "\\:")
         font_arg = f",FontName=Helvetica" if not _SYSTEM_FONT else ""
+        primary_color = _ASS_COLOR_NAMES.get(style["color"], "&H00FFFFFF")
         cmd = [
             "ffmpeg", "-i", video_path, "-i", audio_path,
             "-vf", (
                 f"subtitles={escaped_srt}:force_style="
-                f"'FontSize={SRT_FONT_SIZE},Bold=1,PrimaryColour=&H00FFFFFF,"
+                f"'FontSize={SRT_FONT_SIZE},Bold=1,PrimaryColour={primary_color},"
                 f"OutlineColour=&H00000000,Outline=3,Shadow=2,"
-                f"ShadowColour=&H80000000,Alignment=2,MarginV=160{font_arg}'"
+                f"ShadowColour=&H80000000,Alignment={style['alignment']},MarginV=160{font_arg}'"
             ),
             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-threads", "1",
             "-c:a", "aac", "-b:a", "128k",
@@ -188,9 +333,10 @@ class RenderService:
 
     # --- Pillow PNG overlay path (no drawtext/subtitles filter needed) ---
 
-    def _add_captions_drawtext(self, video_path: str, script: str, audio_path: str, tmp: str, word_timings: list = None, cta: str = "") -> str:
+    def _add_captions_drawtext(self, video_path: str, script: str, audio_path: str, tmp: str, word_timings: list = None, cta: str = "", style: dict = None) -> str:
         from PIL import Image
 
+        style = style or _DEFAULT_CAPTION_STYLE
         out = Path(tmp) / "captioned.mp4"
         caption_data = self._get_caption_segments(script, audio_path, word_timings, cta=cta)
         total_dur = self._get_duration(audio_path)
@@ -204,7 +350,7 @@ class RenderService:
         caption_pngs: list[tuple[float, float, str]] = []
         for i, (start, end, text) in enumerate(caption_data):
             png_path = Path(tmp) / f"cap_{i:04d}.png"
-            self._render_caption_frame(text, font, png_path)
+            self._render_caption_frame(text, font, png_path, style=style)
             caption_pngs.append((start, end, str(png_path)))
 
         # Build concat list: transparent gaps + caption images + trailing gap
@@ -240,8 +386,11 @@ class RenderService:
             self._run_chained_overlays(video_path, audio_path, caption_pngs[:20], out)
         return str(out)
 
-    def _render_caption_frame(self, text: str, font, path: Path) -> None:
+    def _render_caption_frame(self, text: str, font, path: Path, style: dict = None) -> None:
         from PIL import Image, ImageDraw
+        style = style or _DEFAULT_CAPTION_STYLE
+        base_color = _PIL_COLOR_NAMES.get(style["color"], (255, 255, 255, 255))
+        text_color = _ACCENT_COLOR_RGB if self._chunk_has_impact(text) else base_color
         img = Image.new("RGBA", (TARGET_W, TARGET_H), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
         lines = self._wrap_words(text, max_chars=14, max_lines=2)
@@ -283,13 +432,13 @@ class RenderService:
             try:
                 draw.text(
                     (x, y), ln, font=font,
-                    fill=(255, 255, 255, 255),
+                    fill=text_color,
                     stroke_width=3, stroke_fill=(0, 0, 0, 255),
                 )
             except TypeError:
                 for dx, dy in [(-3,-3),(3,-3),(-3,3),(3,3),(0,-3),(0,3),(-3,0),(3,0)]:
                     draw.text((x+dx, y+dy), ln, font=font, fill=(0, 0, 0, 255))
-                draw.text((x, y), ln, font=font, fill=(255, 255, 255, 255))
+                draw.text((x, y), ln, font=font, fill=text_color)
         img.save(str(path))
 
     def _build_alpha_caption_track(self, concat_path: Path, tmp: str) -> Path | None:
@@ -430,10 +579,16 @@ class RenderService:
         captions = self._get_caption_segments(script, audio_path, word_timings, cta=cta)
         with open(srt_path, "w", encoding="utf-8") as f:
             for i, (start, end, text) in enumerate(captions):
+                display = f'<font color="{_ACCENT_HEX}">{text}</font>' if self._chunk_has_impact(text) else text
                 f.write(f"{i + 1}\n")
                 f.write(f"{self._fmt_time(start)} --> {self._fmt_time(end)}\n")
-                f.write(f"{text}\n\n")
+                f.write(f"{display}\n\n")
         return srt_path
+
+    @staticmethod
+    def _chunk_has_impact(text: str) -> bool:
+        words = re.findall(r"[a-z']+", text.lower())
+        return any(w in _IMPACT_WORDS for w in words)
 
     def _get_caption_segments(self, script: str, audio_path: str, word_timings: list = None, cta: str = "") -> list:
         """Returns list of (start_sec, end_sec, text) caption groups — compact word chunks."""

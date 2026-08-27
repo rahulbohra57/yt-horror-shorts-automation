@@ -286,6 +286,7 @@ class GeminiStoryEngine:
         pexels_query = pexels_queries[0] if pexels_queries else "dark horror scene"
 
         title = self._generate_title(niche, hook, title_seed)
+        story_hashtags = self._extract_story_hashtags(hook, title, niche)
         return {
             "niche": niche,
             "hook": hook,
@@ -294,7 +295,7 @@ class GeminiStoryEngine:
             "title": title,
             "pexels_query": pexels_query,
             "pexels_queries": pexels_queries,
-            "seo": self._generate_seo(title, niche),
+            "seo": self._generate_seo(title, niche, story_hashtags),
         }
 
     def generate_series_title(self, niche: str, hook: str, script: str) -> str:
@@ -851,20 +852,46 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
         title = re.sub(r"[A-Za-z]+('[A-Za-z]+)?", lambda m: m.group(0).capitalize(), title)
         return title
 
-    def _generate_seo(self, title: str, niche: str) -> dict:
+    _HASHTAG_STOPWORDS = {
+        "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "of", "for",
+        "with", "was", "is", "were", "are", "this", "that", "had", "has", "have",
+        "you", "your", "she", "her", "hers", "him", "his", "they", "their", "them",
+        "it", "its", "one", "two", "from", "into", "under", "over", "after",
+        "before", "when", "while", "then", "than", "not", "no", "never", "found",
+        "heard", "saw", "said", "there", "here", "who", "what", "why", "how",
+    }
+
+    def _extract_story_hashtags(self, hook: str, title: str, niche: str, max_count: int = 3) -> list[str]:
+        """Pull 2-3 story-specific hashtag tokens from the hook/title so every
+        upload's description isn't just the same static niche hashtag set."""
+        existing = set(SEO_CONFIGS.get(niche, SEO_CONFIGS["horror"])["tags"])
+        words = re.findall(r"[A-Za-z]+", f"{title} {hook}".lower())
+        picked: list[str] = []
+        for w in words:
+            if len(w) < 4 or w in self._HASHTAG_STOPWORDS or w in existing or w in picked:
+                continue
+            picked.append(w)
+            if len(picked) >= max_count:
+                break
+        return picked
+
+    def _generate_seo(self, title: str, niche: str, story_hashtags: list[str] | None = None) -> dict:
         ch = settings.CHANNEL_NAME
         cfg = SEO_CONFIGS.get(niche, SEO_CONFIGS["horror"])
+        story_hashtags = story_hashtags or []
+        story_hashtag_line = " ".join(f"#{tag}" for tag in story_hashtags)
+        hashtags_line = f"{cfg['hashtags']} {story_hashtag_line}".strip() if story_hashtag_line else cfg["hashtags"]
         description = (
             f"{title}\n\n"
             f"{cfg['icon']} {cfg['tagline']}\n\n"
             f"{cfg['sub_tagline']}\n"
             f"{cfg['cta']} → @{ch}\n\n"
             f"{cfg['extras']}\n\n"
-            f"{cfg['hashtags']}\n\n"
+            f"{hashtags_line}\n\n"
             f"{cfg['seo_keywords']}"
         )
         return {
             "title": title,
             "description": description,
-            "tags": cfg["tags"],
+            "tags": cfg["tags"] + story_hashtags,
         }

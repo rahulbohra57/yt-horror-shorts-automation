@@ -139,7 +139,7 @@ class Pipeline:
 
             logger.info(f"[{job_id}] Rendering video")
             update_status(JobStatus.RENDERING)
-            video_path = self.renderer.render(video_paths, audio_path, story["script"], job_id, word_timings=word_timings, niche=niche, cta=story.get("cta", ""))
+            video_path = self.renderer.render(video_paths, audio_path, story["script"], job_id, word_timings=word_timings, niche=niche, cta=story.get("cta", ""), hook=story.get("hook", ""))
 
             youtube_url = None
             gdrive_url = None
@@ -202,6 +202,7 @@ class Pipeline:
                 title=story["title"],
                 script=story["script"],
                 hook=story["hook"],
+                cta=story.get("cta", ""),
                 pexels_query=story["pexels_query"],
             )
             logger.info(f"[{job_id}] Pipeline complete. YouTube={youtube_url} Cloudinary={cloudinary_url} GDrive={gdrive_url}")
