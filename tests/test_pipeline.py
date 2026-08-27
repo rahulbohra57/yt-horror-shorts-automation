@@ -171,6 +171,26 @@ def test_maybe_rename_series_falls_back_on_gemini_failure():
     assert result is assignment
 
 
+def test_apply_series_title_prefix_uses_series_name_and_episode_only():
+    from app.services.pipeline import Pipeline
+
+    story = {
+        "title": "The Rose In My Empty Bed #Shorts",
+        "seo": {
+            "title": "The Rose In My Empty Bed #Shorts",
+            "description": "The Rose In My Empty Bed #Shorts\n\nrest of description",
+            "tags": ["shorts", "horror"],
+        },
+    }
+
+    result = Pipeline._apply_series_title_prefix(story, "Shadow Protocol", 2)
+
+    assert result["title"] == "Shadow Protocol | Ep 2 #Shorts"
+    assert result["seo"]["title"] == "Shadow Protocol | Ep 2 #Shorts"
+    assert result["seo"]["description"].startswith("Shadow Protocol | Ep 2 #Shorts")
+    assert result["seo"]["description"].endswith("rest of description")
+
+
 def test_run_forwards_allow_new_series_to_series_assignment():
     from app.services.pipeline import Pipeline
 

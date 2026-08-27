@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 from app.core.models import SeriesEpisode, SeriesStatus, Short, StorySeries
 
-SERIES_EPISODE_RANGE = (5, 6)
+SERIES_EPISODE_COUNT = 4
 SERIES_NAME_WORDS_A = [
     "Night", "Shadow", "Silent", "Broken", "Whisper", "Crimson", "Vanishing", "Grim",
 ]
@@ -160,7 +160,7 @@ class SeriesService:
             niche=niche,
             title_prefix=name,
             playlist_name=f"{name} Series",
-            planned_episodes=random.randint(*SERIES_EPISODE_RANGE),
+            planned_episodes=SERIES_EPISODE_COUNT,
             status=SeriesStatus.ACTIVE,
             started_at=now,
         )

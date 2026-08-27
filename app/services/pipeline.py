@@ -296,13 +296,18 @@ class Pipeline:
 
     @staticmethod
     def _apply_series_title_prefix(story: dict, prefix: str, episode_number: int) -> dict:
+        """Series episode titles are just "<Series Name> | Ep <N>" — the
+        episode's own hook-based title is dropped in favor of the franchise
+        name so the series reads as one continuous show in a viewer's feed."""
         title = (story.get("title") or "").strip()
         seo = story.get("seo") or {}
-        episode_marker = f"Ep {episode_number}"
-        core_title = title.replace(" #Shorts", "").strip()
-        prefixed = f"{prefix} | {episode_marker}: {core_title}".strip()
-        final_title = f"{prefixed[:90].rstrip()} #Shorts"
-        new_seo = {**seo, "title": final_title}
+        core = f"{prefix} | Ep {episode_number}".strip()
+        final_title = f"{core[:90].rstrip()} #Shorts"
+
+        description = seo.get("description", "")
+        if title and description.startswith(title):
+            description = final_title + description[len(title):]
+        new_seo = {**seo, "title": final_title, "description": description}
         return {**story, "title": final_title, "seo": new_seo}
 
     @staticmethod

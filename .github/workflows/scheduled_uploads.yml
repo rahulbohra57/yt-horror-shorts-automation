@@ -2,7 +2,8 @@ name: Scheduled Shorts Upload
 
 on:
   schedule:
-    - cron: '40 6 * * *'   # 6:40 AM UTC / 12:10 PM IST — single daily episode slot
+    - cron: '40 6 * * *'    # 6:40 AM UTC / 12:10 PM IST — daily series-episode slot
+    - cron: '40 14 * * *'   # 2:40 PM UTC / 8:10 PM IST — daily standalone-story slot
   workflow_dispatch:
     inputs:
       niche:
@@ -109,8 +110,13 @@ jobs:
           echo "niche=${{ github.event.inputs.niche || 'auto' }}" >> "$GITHUB_OUTPUT"
           echo "upload=${{ github.event.inputs.upload || 'true' }}" >> "$GITHUB_OUTPUT"
           if [ "${{ github.event_name }}" = "schedule" ]; then
-            # The single daily cron slot is always the series-episode slot.
-            echo "mode=series" >> "$GITHUB_OUTPUT"
+            # Two daily cron slots: 6:40 UTC is the series-episode slot, the
+            # other schedule entry is the standalone-story slot.
+            if [ "${{ github.event.schedule }}" = "40 6 * * *" ]; then
+              echo "mode=series" >> "$GITHUB_OUTPUT"
+            else
+              echo "mode=story" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "mode=${{ github.event.inputs.mode || 'story' }}" >> "$GITHUB_OUTPUT"
           fi

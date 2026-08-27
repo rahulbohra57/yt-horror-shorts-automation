@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 from app.core.database import init_db, get_session_factory
 from app.core.models import JobStatus, Short, SeriesStatus, StorySeries
-from app.services.series_service import SeriesService, SERIES_EPISODE_RANGE, is_series_start_day
+from app.services.series_service import SeriesService, SERIES_EPISODE_COUNT, is_series_start_day
 
 
 def _make_session(tmp_path):
@@ -20,8 +20,8 @@ def _make_short(session, niche="horror") -> Short:
     return short
 
 
-def test_episode_range_is_five_or_six():
-    assert SERIES_EPISODE_RANGE == (5, 6)
+def test_episode_count_is_four():
+    assert SERIES_EPISODE_COUNT == 4
 
 
 def test_assign_short_returns_none_when_no_active_series_and_new_series_not_allowed(tmp_path):
@@ -44,8 +44,10 @@ def test_assign_short_starts_new_series_when_allowed(tmp_path):
 
     assert assignment is not None
     assert assignment.episode_number == 1
+    assert assignment.planned_episodes == SERIES_EPISODE_COUNT
     series = session.query(StorySeries).filter(StorySeries.id == assignment.series_id).first()
     assert series.status == SeriesStatus.ACTIVE
+    assert series.planned_episodes == SERIES_EPISODE_COUNT
 
 
 def test_assign_short_continues_existing_series_even_when_new_series_not_allowed(tmp_path):
