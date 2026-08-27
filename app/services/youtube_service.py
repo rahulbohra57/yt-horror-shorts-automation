@@ -32,6 +32,11 @@ class YouTubeService:
         logger.info(f"Uploaded to YouTube: {url}")
         return url
 
+    def delete(self, video_id: str) -> None:
+        service = self._get_service()
+        service.videos().delete(id=video_id).execute()
+        logger.info(f"Deleted YouTube video: {video_id}")
+
     def ensure_playlist(self, name: str, description: str = "", privacy: str = "public") -> str:
         service = self._get_service()
         existing_id = self._find_playlist_id(service, name)

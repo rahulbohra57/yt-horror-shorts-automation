@@ -441,8 +441,17 @@ class RenderService:
                 draw.text((x, y), ln, font=font, fill=text_color)
         img.save(str(path))
 
+    _ALPHA_PIX_FMTS = {"yuva420p", "rgba", "bgra", "argb", "abgr", "ya8"}
+
     def _build_alpha_caption_track(self, concat_path: Path, tmp: str) -> Path | None:
-        """Encode PNG concat list into an alpha-channel video. Tries ffv1 → qtrle → prores."""
+        """Encode PNG concat list into an alpha-channel video. Tries ffv1 → qtrle → prores.
+
+        Some ffmpeg/libvpx builds accept `-pix_fmt yuva420p` for vp9 and exit 0
+        while silently dropping the alpha plane (encoding opaque yuv420p instead).
+        That turns the caption overlay into an opaque black frame covering the
+        whole background video, so accepting on exit code alone isn't enough —
+        the actual output pixel format must be verified to carry alpha.
+        """
         attempts = [
             (Path(tmp) / "cap_track.webm", ["-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-r", "30", "-b:v", "0", "-crf", "30", "-threads", "1"]),
             (Path(tmp) / "cap_track.mkv",  ["-c:v", "ffv1",       "-pix_fmt", "rgba",      "-r", "30", "-threads", "1"]),
@@ -454,11 +463,24 @@ class RenderService:
                  *codec_args, "-y", str(track_path)],
                 capture_output=True, text=True,
             )
-            if r.returncode == 0:
+            if r.returncode == 0 and self._output_has_alpha(track_path):
                 logger.info(f"Caption track encoded with {codec_args[1]}: {track_path.name}")
                 return track_path
-            logger.debug(f"Caption codec {codec_args[1]} failed: {r.stderr[-200:]}")
+            if r.returncode == 0:
+                logger.warning(f"Caption codec {codec_args[1]} exited 0 but dropped alpha, trying next")
+            else:
+                logger.debug(f"Caption codec {codec_args[1]} failed: {r.stderr[-200:]}")
         return None
+
+    @staticmethod
+    def _output_has_alpha(path: Path) -> bool:
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=pix_fmt", "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+            capture_output=True, text=True,
+        )
+        pix_fmt = result.stdout.strip()
+        return pix_fmt in RenderService._ALPHA_PIX_FMTS
 
     def _run_chained_overlays(
         self, video_path: str, audio_path: str,
