@@ -98,6 +98,14 @@ jobs:
           restore-keys: |
             shorts-db-${{ github.ref_name }}-
 
+      - name: Restore Used Footage List
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/pexels_cache/used_video_ids.json
+          key: pexels-used-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            pexels-used-${{ github.ref_name }}-
+
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
@@ -152,6 +160,7 @@ jobs:
           OUTPUT_DIR: /tmp/shorts_output
           SCHEDULER_ENABLED: "false"
           ALLOW_GTTS_FALLBACK: "true"
+          AI_STILLS_ENABLED: ${{ vars.AI_STILLS_ENABLED || 'false' }}
         run: |
           set -euo pipefail
           mkdir -p .data
@@ -184,3 +193,10 @@ jobs:
         with:
           path: .data/shorts.db
           key: shorts-db-${{ github.ref_name }}-${{ github.run_id }}
+
+      - name: Save Used Footage List
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/pexels_cache/used_video_ids.json
+          key: pexels-used-${{ github.ref_name }}-${{ github.run_id }}

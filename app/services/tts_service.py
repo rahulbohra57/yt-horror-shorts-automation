@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import subprocess
 from pathlib import Path
 from gtts import gTTS
 import edge_tts
@@ -62,6 +63,62 @@ class TTSService:
             await loop.run_in_executor(None, self._gtts_fallback, clean, output_path)
 
         return str(output_path), word_timings
+
+    async def generate_with_pause(
+        self, story: str, cta: str, pause_seconds: float = 1.1, tail_seconds: float = 0.5,
+        voice: str = DEFAULT_VOICE, rate: str = DEFAULT_RATE,
+    ) -> tuple[str, list, dict]:
+        """Narrate story and CTA separately with silence between, so the twist can land.
+
+        Returns (audio_path, word_timings, pacing). Pacing marks where the story
+        ends and the CTA starts on the combined timeline.
+        """
+        story_path, story_timings = await self.generate(story, voice=voice, rate=rate)
+        cta_path, cta_timings = await self.generate(cta, voice=voice, rate=rate)
+
+        story_duration = self._probe_duration(story_path)
+        cta_start = story_duration + pause_seconds
+        key = hashlib.sha256(f"{story_path}{cta_path}{pause_seconds}{tail_seconds}".encode()).hexdigest()
+        combined = self.output_dir / f"{key}_paced.mp3"
+        if not combined.exists():
+            self._join_with_silence(story_path, cta_path, pause_seconds, tail_seconds, combined)
+
+        # Both halves need timings; a partial set would misalign every caption.
+        timings: list = []
+        if story_timings and cta_timings:
+            shifted = [{**t, "offset": t["offset"] + cta_start} for t in cta_timings]
+            timings = story_timings + shifted
+        story_end = story_duration
+        if story_timings:
+            last = story_timings[-1]
+            story_end = min(story_duration, last["offset"] + last["duration"])
+        pacing = {"story_end": story_end, "cta_start": cta_start, "total": self._probe_duration(str(combined))}
+        return str(combined), timings, pacing
+
+    @staticmethod
+    def _probe_duration(path: str) -> float:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", path],
+            capture_output=True, text=True, check=True,
+        )
+        return float(out.stdout.strip())
+
+    @staticmethod
+    def _join_with_silence(story: str, cta: str, pause: float, tail: float, output: Path) -> None:
+        graph = (
+            "[0:a]aformat=sample_rates=24000:channel_layouts=mono[a0];"
+            "[2:a]aformat=sample_rates=24000:channel_layouts=mono[a2];"
+            "[a0][1:a][a2][3:a]concat=n=4:v=0:a=1[out]"
+        )
+        silence = "anullsrc=r=24000:cl=mono"
+        subprocess.run(
+            ["ffmpeg", "-i", story, "-f", "lavfi", "-t", f"{pause:.3f}", "-i", silence,
+             "-i", cta, "-f", "lavfi", "-t", f"{tail:.3f}", "-i", silence,
+             "-filter_complex", graph, "-map", "[out]",
+             "-c:a", "libmp3lame", "-q:a", "2", "-y", str(output)],
+            capture_output=True, check=True,
+        )
 
     async def _edge_tts(self, text: str, voice: str, rate: str, output_path: Path) -> list:
         """Generate audio + word timings via edge-tts streaming."""

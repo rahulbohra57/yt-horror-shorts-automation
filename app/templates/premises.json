@@ -1,0 +1,64 @@
+{
+  "pov": {
+    "first_person": "First person past tense (I, me, my). A survivor telling you what happened.",
+    "second_person": "Second person present tense (you, your), as if it is happening to the viewer.",
+    "third_person": "Close third person past tense following one named character.",
+    "witness": "First person, but the narrator is a witness describing what happened to someone else they knew."
+  },
+  "formats": {
+    "real_time": "Real-time single-location incident where events unfold minute by minute.",
+    "evidence": "Recovered evidence narrative anchored on logs, messages, or recordings.",
+    "confession": "Confession where the narrator admits what they did after the event.",
+    "rule": "Rule-based setup where breaking one specific rule triggers escalating danger.",
+    "countdown": "Countdown tied to a specific time limit before the reveal.",
+    "false_safe": "False-safe scenario where an apparent rescue becomes the final threat."
+  },
+  "endings": {
+    "was_the_threat": "The narrator or protagonist turns out to have been the threat all along.",
+    "too_late": "The protagonist solves it, but the answer arrives too late and costs them everything.",
+    "survives_changed": "The protagonist escapes, but a final concrete detail shows what it permanently took from them.",
+    "trusted_betrayer": "The person the protagonist trusted most is revealed as the cause, with proof.",
+    "already_dead": "A planted detail proves someone in the story has been dead the whole time.",
+    "threat_defeated_at_cost": "The threat is actually stopped, and we learn the terrible price that was paid.",
+    "true_purpose": "The strange events are revealed to have had a specific, horrifying purpose, now fulfilled."
+  },
+  "protagonists": [
+    "a night-shift worker", "a new parent", "a teenager home alone", "a retired widower",
+    "a delivery driver", "a junior nurse", "a house sitter", "a long-haul trucker",
+    "a grieving sibling", "a locksmith", "a substitute teacher", "a radio engineer"
+  ],
+  "niches": {
+    "horror": {
+      "settings": ["a flooded basement apartment", "a roadside diner after closing", "a snowed-in ski lodge", "a family home mid-renovation", "a closed public swimming pool", "a rural gas station at night", "a storage unit facility"],
+      "threats": ["something copying a family member's voice", "a presence that only moves when unobserved", "a stranger who has been living in the walls", "a dead relative's belongings returning one by one", "an animal behaving with human intelligence", "a shape that gets closer in every photo", "a hunger passed from person to person"]
+    },
+    "mystery": {
+      "settings": ["a small-town newspaper office", "a ferry crossing in heavy fog", "a pawn shop", "a university records archive", "a hotel laundry room", "a harbor warehouse", "a private members' club"],
+      "threats": ["a forged will that names the wrong heir", "a missing person who keeps sending postcards", "a witness whose story is too perfect", "a stolen item returned with one change", "a decades-old cold case with a fresh fingerprint", "an anonymous tip that predicts the crime", "two people claiming the same identity"]
+    },
+    "paranormal": {
+      "settings": ["a decommissioned lighthouse", "a converted church", "a shuttered drive-in theater", "a coal mine museum", "an old telephone exchange", "a battlefield campsite", "a shuttered orphanage turned hostel"],
+      "threats": ["a spirit replaying the last hour of its life", "a voice caught only on recordings", "a poltergeist reacting to one person", "cold spots that trace a person's route", "an apparition visible only in peripheral vision", "a spirit trying to warn rather than harm", "a haunting tied to a sold piece of furniture"]
+    },
+    "twist_endings": {
+      "settings": ["a courtroom waiting room", "a suburban cul-de-sac", "a long-distance train", "a dementia care home", "a wedding rehearsal", "a therapist's office", "a small airport at night"],
+      "threats": ["a kindness that hides a motive", "a rescue that was staged", "a stalker who is not who they appear to be", "a family tradition with a hidden reason", "a stranger who knows the protagonist's future", "an apology letter meant for someone else", "a mistaken identity that was deliberate"]
+    },
+    "psychological": {
+      "settings": ["a corporate open-plan office at night", "a sleep study clinic", "a remote writer's retreat", "a silent meditation center", "a high-rise apartment", "a memory care research wing", "a small-town therapist's home"],
+      "threats": ["a partner quietly rewriting shared memories", "a daily routine that has been subtly altered", "notes in the protagonist's handwriting they never wrote", "colleagues who insist a coworker never existed", "a medication that changes what is remembered", "a mirror-image life being lived next door", "a voice that sounds like the protagonist's own conscience"]
+    },
+    "supernatural": {
+      "settings": ["a monastery in the mountains", "an auction house vault", "a desert excavation site", "a deconsecrated cathedral", "an antique bookshop", "a salt mine", "a lakeside cabin in winter"],
+      "threats": ["a contract signed by an ancestor coming due", "a relic that grants wishes at a price", "a name that must never be spoken", "a demon bound to a bloodline", "a ritual finished by accident", "a curse transferred by a gift", "a god that wakes when it is counted"]
+    },
+    "slasher": {
+      "settings": ["a summer camp out of season", "a highway rest stop", "a corn maze after closing", "a college dorm over winter break", "a lakeside marina", "an empty shopping mall", "a truck stop motel"],
+      "threats": ["a hunter who leaves a warning before each attack", "a masked figure mimicking a local legend", "a killer among the survivors", "a stalker using the group's own phones", "a hunter who only moves during power cuts", "an attacker who knows the building's hidden routes", "a game with rules the victims must follow"]
+    },
+    "folk_horror": {
+      "settings": ["a remote fishing village", "a hill-country farming hamlet", "an island with one ferry a month", "a moorland parish", "a forest logging settlement", "a harvest festival in a valley town", "a mountain shepherds' village"],
+      "threats": ["a harvest offering that requires an outsider", "villagers who all share one dream", "an annual lottery nobody will explain", "a scarecrow tradition with a human purpose", "a well the village feeds every winter", "a wedding custom with a hidden sacrifice", "a folk song that summons what it describes"]
+    }
+  }
+}

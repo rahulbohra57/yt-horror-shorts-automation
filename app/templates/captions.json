@@ -1,26 +1,26 @@
 {
   "default": {
-    "font_size": 56,
+    "font_size": 112,
     "color": "white",
     "outline_color": "black",
-    "outline_width": 3,
+    "outline_width": 9,
     "alignment": 2,
-    "margin_v": 80
+    "margin_v": 470
   },
   "bold_yellow": {
-    "font_size": 60,
+    "font_size": 118,
     "color": "yellow",
     "outline_color": "black",
-    "outline_width": 4,
+    "outline_width": 10,
     "alignment": 2,
-    "margin_v": 80
+    "margin_v": 470
   },
   "top_white": {
-    "font_size": 52,
+    "font_size": 104,
     "color": "white",
     "outline_color": "black",
-    "outline_width": 3,
+    "outline_width": 9,
     "alignment": 8,
-    "margin_v": 80
+    "margin_v": 320
   }
 }

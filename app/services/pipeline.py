@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import random
 import requests
@@ -13,6 +14,7 @@ from app.services.youtube_service import YouTubeService
 from app.services.telegram_service import TelegramService
 from app.services.gdrive_service import GDriveService
 from app.services.cloudinary_service import CloudinaryService
+from app.services.image_service import ImageService
 from app.services.series_service import SeriesService, SeriesAssignment
 
 logger = logging.getLogger(__name__)
@@ -56,6 +58,15 @@ class Pipeline:
             else None
         )
         self.series = SeriesService()
+        self.images = (
+            ImageService(
+                api_key=settings.GEMINI_API_KEY,
+                model=settings.AI_STILL_MODEL,
+                output_dir=settings.OUTPUT_DIR + "/stills",
+            )
+            if settings.AI_STILLS_ENABLED
+            else None
+        )
 
     async def run(self, niche: str, job_id: str, session, upload: bool = True, series_mode: bool = False, allow_new_series: bool = False) -> dict:
         short = session.query(Short).filter_by(id=int(job_id)).first()
@@ -94,6 +105,17 @@ class Pipeline:
             update_status(JobStatus.GENERATING)
             await self.telegram.notify_started(effective_niche, job_id)
             recent_scripts, recent_titles, recent_hooks = self._load_recent_context(session, job_id)
+            recent_premises = self._load_recent_premises(session, job_id)
+
+            series_premise = None
+            if assignment:
+                bible = self._ensure_series_bible(
+                    session, job_id, assignment, effective_niche, recent_premises, continuity_context,
+                )
+                if bible:
+                    series_premise = bible["premise"]
+                    plan_text = self.story.format_series_plan(bible, assignment.episode_number)
+                    continuity_context = f"{plan_text}\n\n{continuity_context}".strip()
 
             story = self.story.generate(
                 effective_niche,
@@ -104,6 +126,8 @@ class Pipeline:
                 is_final_episode=is_final_episode,
                 recent_titles=recent_titles,
                 recent_hooks=recent_hooks,
+                recent_premises=recent_premises,
+                premise=series_premise,
             )
             if assignment:
                 assignment = self._maybe_rename_series(session, job_id, assignment, effective_niche, story)
@@ -111,35 +135,28 @@ class Pipeline:
             story = self._ensure_cta_in_script(story)
 
             logger.info(f"[{job_id}] Generating TTS")
-            audio_path, word_timings = await self.tts.generate(story["script"])
+            audio_path, word_timings, pacing = await self._narrate(story)
 
             logger.info(f"[{job_id}] Fetching Pexels videos (multi-scene)")
-            pexels_queries = story.get("pexels_queries", [story["pexels_query"]])
-            # Use scene-specific queries first (Gemini provides 6), deduplicate, cap at 6
-            seen_queries: set[str] = set()
-            unique_queries = []
-            for q in pexels_queries:
-                if q not in seen_queries:
-                    seen_queries.add(q)
-                    unique_queries.append(q)
-            video_paths = []
-            for q in unique_queries[:6]:
-                try:
-                    videos = self.pexels.search_videos(q, count=1)
-                    for v in videos:
-                        try:
-                            video_paths.append(self.pexels.download_video(v["url"]))
-                        except Exception as dl_err:
-                            logger.warning(f"[{job_id}] Video download failed for '{q}': {dl_err}")
-                except Exception as q_err:
-                    logger.warning(f"[{job_id}] Pexels query '{q}' failed: {q_err}")
+            video_paths, scene_clips = self._fetch_footage(job_id, story)
             if not video_paths:
                 raise RuntimeError("No videos could be fetched from Pexels")
             logger.info(f"[{job_id}] Downloaded {len(video_paths)} scene clips")
 
             logger.info(f"[{job_id}] Rendering video")
             update_status(JobStatus.RENDERING)
-            video_path = self.renderer.render(video_paths, audio_path, story["script"], job_id, word_timings=word_timings, niche=niche, cta=story.get("cta", ""), hook=story.get("hook", ""))
+            video_path = self.renderer.render(
+                video_paths, audio_path, story["script"], job_id,
+                word_timings=word_timings,
+                niche=effective_niche,
+                cta=story.get("cta", ""),
+                scenes=scene_clips,
+                pacing=pacing,
+                hook_card=story.get("hook_card", ""),
+                story_format=story.get("story_format", ""),
+                on_screen_text=story.get("on_screen_text", ""),
+                end_card_text=self._end_card_text(assignment, is_final_episode),
+            )
 
             youtube_url = None
             gdrive_url = None
@@ -204,6 +221,7 @@ class Pipeline:
                 hook=story["hook"],
                 cta=story.get("cta", ""),
                 pexels_query=story["pexels_query"],
+                premise=json.dumps(story.get("premise")) if story.get("premise") else None,
             )
             logger.info(f"[{job_id}] Pipeline complete. YouTube={youtube_url} Cloudinary={cloudinary_url} GDrive={gdrive_url}")
             return {"status": "done", "youtube_url": youtube_url, "cloudinary_url": cloudinary_url, "gdrive_url": gdrive_url, "title": story["title"]}
@@ -218,6 +236,103 @@ class Pipeline:
             update_status(JobStatus.FAILED, error_message=str(e)[:1000])
             await self.telegram.notify_failed(job_id, niche, str(e))
             return {"status": "failed", "error": str(e)}
+
+    async def _narrate(self, story: dict) -> tuple[str, list, dict | None]:
+        """Voice the story and CTA with a pause between them when they can be separated."""
+        script = story["script"].strip()
+        cta = (story.get("cta") or "").strip()
+        if cta and script.endswith(cta) and len(script) > len(cta):
+            body = script[: -len(cta)].strip()
+            return await self.tts.generate_with_pause(body, cta)
+        audio_path, word_timings = await self.tts.generate(script)
+        return audio_path, word_timings, None
+
+    def _download_first(self, job_id: str, query: str) -> str | None:
+        try:
+            for video in self.pexels.search_videos(query, count=1):
+                return self.pexels.download_video(video["url"])
+        except Exception as e:
+            logger.warning(f"[{job_id}] Footage for '{query}' failed: {e}")
+        return None
+
+    def _fetch_footage(self, job_id: str, story: dict) -> tuple[list[str], list[dict]]:
+        """One clip per story beat. Returns (all paths, scenes anchored to narration)."""
+        scene_plan = story.get("scenes") or []
+        all_queries = list(dict.fromkeys(story.get("pexels_queries") or [story["pexels_query"]]))
+        spare_queries = [q for q in all_queries if q not in {s["query"] for s in scene_plan}]
+
+        scene_clips: list[dict] = []
+        for scene in scene_plan:
+            path = self._download_first(job_id, scene["query"])
+            while not path and spare_queries:
+                path = self._download_first(job_id, spare_queries.pop(0))
+            if path:
+                scene_clips.append({"path": path, "word_index": scene["word_index"]})
+
+        video_paths = [c["path"] for c in scene_clips]
+        if not video_paths:
+            for query in all_queries[:6]:
+                path = self._download_first(job_id, query)
+                if path:
+                    video_paths.append(path)
+            return video_paths, []
+
+        self._insert_key_still(job_id, story, scene_clips, video_paths)
+        return video_paths, scene_clips
+
+    def _insert_key_still(self, job_id: str, story: dict, scene_clips: list[dict], video_paths: list[str]) -> None:
+        key_visual = story.get("key_visual")
+        if not self.images or not key_visual:
+            return
+        still = self.images.generate_still(key_visual["image_prompt"])
+        if not still:
+            return
+        index = key_visual["word_index"]
+        scene_clips[:] = [c for c in scene_clips if c["word_index"] != index]
+        scene_clips.append({"path": still, "word_index": index})
+        scene_clips.sort(key=lambda c: c["word_index"])
+        video_paths.append(still)
+        logger.info(f"[{job_id}] Added AI still at word {index}")
+
+    @staticmethod
+    def _end_card_text(assignment, is_final_episode: bool) -> str:
+        if assignment and not is_final_episode:
+            return f"PART {assignment.episode_number + 1}\nTOMORROW"
+        return f"FOLLOW\n@{settings.CHANNEL_NAME}"
+
+    def _ensure_series_bible(
+        self, session, job_id: str, assignment, niche: str, recent_premises: list[dict], published: str,
+    ) -> dict | None:
+        """Load the series plan, creating it on episode 1 or for a series already running."""
+        try:
+            bible = self.series.get_bible(session, assignment.series_id)
+            if bible:
+                return bible
+            premise = self.story.pick_premise(niche, recent_premises)
+            bible = self.story.generate_series_bible(
+                niche, premise, assignment.planned_episodes, published_episodes=published,
+            )
+            self.series.save_bible(session, assignment.series_id, bible)
+            return bible
+        except Exception as e:
+            logger.warning(f"[{job_id}] Series plan unavailable, using earlier episodes only: {e}")
+            return None
+
+    @staticmethod
+    def _load_recent_premises(session, job_id: str) -> list[dict]:
+        """Premises already used, newest first, so new stories can avoid them."""
+        try:
+            rows = (
+                session.query(Short.premise)
+                .filter(Short.premise.isnot(None), Short.id != int(job_id))
+                .order_by(Short.created_at.desc())
+                .limit(200)
+                .all()
+            )
+            return [json.loads(row[0]) for row in rows if row[0]]
+        except Exception as e:
+            logger.warning(f"[{job_id}] Failed to load recent premises: {e}")
+            return []
 
     @staticmethod
     def _ensure_cta_in_script(story: dict) -> dict:

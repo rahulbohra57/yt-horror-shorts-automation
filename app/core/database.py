@@ -10,6 +10,13 @@ class Base(DeclarativeBase):
     pass
 
 
+_ADDED_COLUMNS = [
+    ("shorts", "cta", "TEXT"),
+    ("shorts", "premise", "TEXT"),
+    ("story_series", "bible", "TEXT"),
+]
+
+
 def get_engine(db_path: str):
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     engine = create_engine(
@@ -32,13 +39,14 @@ def _apply_lightweight_migrations(engine):
     that already exist in a deployed DB file. Patch those in here instead of
     pulling in a full migration framework for a single-file SQLite project."""
     inspector = inspect(engine)
-    if "shorts" not in inspector.get_table_names():
-        return
-    existing_cols = {c["name"] for c in inspector.get_columns("shorts")}
-    if "cta" not in existing_cols:
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE shorts ADD COLUMN cta TEXT"))
-        logger.info("Migrated shorts table: added cta column")
+    tables = inspector.get_table_names()
+    for table, column, column_type in _ADDED_COLUMNS:
+        if table not in tables:
+            continue
+        if column not in {c["name"] for c in inspector.get_columns(table)}:
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}"))
+            logger.info(f"Migrated {table} table: added {column} column")
 
 
 def get_session_factory(engine):

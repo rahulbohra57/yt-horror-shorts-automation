@@ -3,6 +3,7 @@ import logging
 import random
 import re
 import zlib
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
@@ -10,6 +11,7 @@ from typing import Iterable
 import google.generativeai as genai
 
 from app.core.config import settings
+from app.services.premise_bank import describe_premise, pick_premise
 
 logger = logging.getLogger(__name__)
 
@@ -164,24 +166,6 @@ SEO_CONFIGS = {
     },
 }
 
-STORY_FORMATS = [
-    "Real-time single-location incident where events unfold minute by minute.",
-    "Recovered evidence narrative using logs, messages, or recordings as anchors.",
-    "Confession format where the protagonist admits what happened after the event.",
-    "Rule-based setup where breaking one specific rule triggers escalating danger.",
-    "Countdown structure tied to a specific time limit before a reveal.",
-    "False-safe scenario where an apparent rescue or solution becomes the final threat.",
-]
-
-VISUAL_MOTIFS = [
-    "rain-soaked neon streets at night",
-    "clinical fluorescent interiors with long empty corridors",
-    "rural daylight unease with abandoned fields and silence",
-    "grainy security-camera aesthetics in parking and hall spaces",
-    "fog-heavy roads with isolated headlights and distant silhouettes",
-    "decaying domestic spaces with flickering warm practical lights",
-]
-
 CONCEPT_KEYWORDS = {
     "mirror": ["mirror", "reflection", "glass"],
     "phone_call": ["phone call", "voicemail", "unknown number", "ringing phone"],
@@ -227,12 +211,47 @@ CTA_BUCKETS = {
         "Vote now: coincidence or curse?",
         "Would you stay or run? Answer with one word.",
     ],
-    "cliffhanger": [
-        "Want part 2 of this case? Comment PART 2.",
-        "If this gets enough comments, I will drop the hidden follow-up.",
-        "There is a deeper layer to this story. Say NEXT for it.",
-    ],
 }
+
+
+SERIES_CTA_TEMPLATES = [
+    "Part {next} drops tomorrow. Follow so you don't miss it.",
+    "Part {next} is tomorrow. Follow to see what happens next.",
+    "This is not over. Follow for part {next} tomorrow.",
+]
+
+QUALITY_NONE = "none"
+QUALITY_STRICT = "strict"
+QUALITY_RELAXED = "relaxed"
+QUALITY_ERROR_PREFIX = "Story failed quality check"
+MODE_STANDALONE = "standalone"
+MODE_CLIFFHANGER = "cliffhanger"
+MODE_FINALE = "finale"
+# The prompt targets 130-140 story words; these are the enforced limits.
+STRICT_WORD_RANGE = (120, 155)
+RELAXED_WORD_RANGE = (100, 175)
+MAX_SCENES = 8
+# The SDK has no default timeout, and a hung call would stall the whole scheduled job.
+REQUEST_OPTIONS = {"timeout": 120}
+RECENT_HOOK_OPENINGS = 6
+DANGLING_LAST_WORDS = {
+    "the", "a", "an", "and", "or", "but", "of", "to", "with", "my", "your", "his", "her",
+    "their", "in", "on", "at", "for", "from", "that",
+}
+
+
+@dataclass
+class StoryDraft:
+    hook: str
+    script: str
+    cta: str
+    title_seed: str
+    scene_queries: list = field(default_factory=list)
+    scenes: list = field(default_factory=list)
+    hook_card: str = ""
+    on_screen_text: str = ""
+    plan: dict = field(default_factory=dict)
+    key_visual: dict | None = None
 
 
 class GeminiStoryEngine:
@@ -242,7 +261,9 @@ class GeminiStoryEngine:
         self._niches = self._load_niches()
         self._hooks = self._load_hooks()
         genai.configure(api_key=settings.GEMINI_API_KEY)
-        self._model = genai.GenerativeModel("gemini-2.5-flash-lite")
+        self._model = genai.GenerativeModel(settings.GEMINI_STORY_MODEL)
+        self._check_model = genai.GenerativeModel(settings.GEMINI_CHECK_MODEL)
+        self._fallback_model = self._check_model
 
     def _load_niches(self) -> dict:
         try:
@@ -258,6 +279,9 @@ class GeminiStoryEngine:
         except (FileNotFoundError, KeyError):
             return []
 
+    def pick_premise(self, niche: str, recent_premises: list[dict] | None = None) -> dict:
+        return pick_premise(niche, recent_premises)
+
     def generate(
         self,
         niche: str,
@@ -268,33 +292,40 @@ class GeminiStoryEngine:
         is_final_episode: bool = True,
         recent_titles: Iterable[str] | None = None,
         recent_hooks: Iterable[str] | None = None,
+        recent_premises: list[dict] | None = None,
+        premise: dict | None = None,
     ) -> dict:
         recent = list(recent_scripts or [])
         niche_data = self._niches.get(niche, {})
-        motif = self._select_visual_motif()
-        pexels_queries = self._build_pexels_queries(niche_data, motif)
-        pexels_query = random.choice(pexels_queries)
+        premise = premise or pick_premise(niche, recent_premises)
+        pexels_queries = self._build_pexels_queries(niche_data)
 
-        hook, script, cta, title_seed, scene_queries = self._generate_with_fallback(
-            niche, recent, motif, series_context, series_episode_number, series_name,
+        draft = self._generate_with_fallback(
+            niche, recent, premise, series_context, series_episode_number, series_name,
             is_final_episode, list(recent_titles or []), list(recent_hooks or []),
         )
 
         # Prepend story-specific scene queries so the pipeline fetches visually matched footage.
-        if scene_queries:
-            pexels_queries = list(dict.fromkeys(scene_queries + pexels_queries))
+        if draft.scene_queries:
+            pexels_queries = list(dict.fromkeys(draft.scene_queries + pexels_queries))
         pexels_query = pexels_queries[0] if pexels_queries else "dark horror scene"
 
-        title = self._generate_title(niche, hook, title_seed)
-        story_hashtags = self._extract_story_hashtags(hook, title, niche)
+        title = self._generate_title(niche, draft.hook, draft.title_seed)
+        story_hashtags = self._extract_story_hashtags(draft.hook, title, niche)
         return {
             "niche": niche,
-            "hook": hook,
-            "script": script,
-            "cta": cta,
+            "hook": draft.hook,
+            "script": draft.script,
+            "cta": draft.cta,
             "title": title,
             "pexels_query": pexels_query,
             "pexels_queries": pexels_queries,
+            "scenes": draft.scenes,
+            "hook_card": draft.hook_card,
+            "on_screen_text": draft.on_screen_text,
+            "key_visual": draft.key_visual,
+            "story_format": premise["format"],
+            "premise": {**premise, "plan": draft.plan},
             "seo": self._generate_seo(title, niche, story_hashtags),
         }
 
@@ -311,47 +342,59 @@ class GeminiStoryEngine:
             "No quotes, no markdown, no trailing punctuation.\n\n"
             "Respond with ONLY the title text, nothing else."
         )
-        response = self._model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(temperature=0.9, max_output_tokens=32),
-        )
-        title = (response.text or "").strip()
-        title = re.sub(r'["\'`*_]+', "", title)
-        title = re.sub(r"\s+", " ", title).strip(" .,:;-")
-        if not title or len(title) > 60:
-            raise ValueError(f"Invalid series title generated: '{title}'")
-        return title
+        last_error: Exception | None = None
+        for _ in range(3):
+            try:
+                response = self._generate_story_content(
+                    prompt,
+                    # Thinking models spend output tokens before writing, so 32 is not enough.
+                    genai.types.GenerationConfig(temperature=0.9, max_output_tokens=2048),
+                )
+                title = (response.text or "").strip()
+                title = re.sub(r'["\'`*_]+', "", title)
+                title = re.sub(r"\s+", " ", title).strip(" .,:;-")
+                if len(title.split()) < 2 or len(title) > 60:
+                    raise ValueError(f"Invalid series title generated: '{title}'")
+                return title
+            except Exception as e:
+                last_error = e
+        raise ValueError(f"Could not name series: {last_error}")
 
     def _generate_with_fallback(
         self,
         niche: str,
         recent: list[str],
-        motif: str,
+        premise: dict,
         series_context: str = "",
         series_episode_number: int | None = None,
         series_name: str = "",
         is_final_episode: bool = True,
         recent_titles: list[str] | None = None,
         recent_hooks: list[str] | None = None,
-    ) -> tuple[str, str, str, str, list]:
+    ) -> StoryDraft:
         last_error: Exception | None = None
         blocked_tags = self._recent_concept_tags(recent[:30])
+        common = dict(
+            niche=niche,
+            recent_scripts=recent,
+            premise=premise,
+            series_context=series_context,
+            series_episode_number=series_episode_number,
+            series_name=series_name,
+            is_final_episode=is_final_episode,
+            recent_titles=recent_titles,
+            recent_hooks=recent_hooks,
+        )
 
-        # Tier 1: strict novelty enforcement.
+        # Tier 1: strict novelty and story-quality enforcement.
         for attempt in range(1, 6):
             try:
                 return self._call_gemini(
-                    niche=niche,
-                    recent_scripts=recent,
-                    motif=motif,
-                    series_context=series_context,
-                    series_episode_number=series_episode_number,
-                    series_name=series_name,
+                    **common,
                     blocked_tags_override=blocked_tags,
                     overlap_fail_count=2,
-                    is_final_episode=is_final_episode,
-                    recent_titles=recent_titles,
-                    recent_hooks=recent_hooks,
+                    quality=QUALITY_STRICT,
+                    rejection_note=str(last_error) if self._is_quality_error(last_error) else "",
                 )
             except Exception as e:
                 last_error = e
@@ -360,26 +403,19 @@ class GeminiStoryEngine:
                     attempt, type(e).__name__, str(e)[:180],
                 )
 
-        # Tier 2: relaxed novelty retries when strict failures are overlap-specific.
-        if self._is_concept_overlap_error(last_error):
+        # Tier 2: relaxed retries when the failures were about the story, not the API.
+        if self._is_concept_overlap_error(last_error) or self._is_quality_error(last_error):
             relaxed_blocked_tags = self._drop_most_common_blocked_tag(recent[:30], blocked_tags)
             for attempt in range(1, 4):
                 try:
                     result = self._call_gemini(
-                        niche=niche,
-                        recent_scripts=recent,
-                        motif=motif,
-                        series_context=series_context,
-                        series_episode_number=series_episode_number,
-                        series_name=series_name,
+                        **common,
                         blocked_tags_override=relaxed_blocked_tags,
                         overlap_fail_count=3,
-                        is_final_episode=is_final_episode,
-                        recent_titles=recent_titles,
-                        recent_hooks=recent_hooks,
+                        quality=QUALITY_RELAXED,
                     )
                     logger.warning(
-                        "[GeminiStoryEngine] Recovered via relaxed novelty fallback on attempt %d",
+                        "[GeminiStoryEngine] Recovered via relaxed fallback on attempt %d",
                         attempt,
                     )
                     return result
@@ -390,27 +426,29 @@ class GeminiStoryEngine:
                         attempt, type(e).__name__, str(e)[:180],
                     )
 
-        # Tier 3: deterministic local template fallback so schedules can still ship.
-        try:
-            template_story = self._build_template_story(niche)
-            hook = template_story["hook"]
-            script = template_story["script"]
-            script = self._ensure_hook_starts_script(script, hook)
-            cta = self._choose_cta(niche)
-            script = self._append_cta(script, cta)
-            script = self._close_incomplete_sentence(script)
-            title_seed = template_story["title"]
-            logger.warning("[GeminiStoryEngine] Using deterministic template fallback for niche=%s", niche)
-            return hook, script, cta, title_seed, []
-        except Exception as template_error:
-            logger.error(
-                "[GeminiStoryEngine] Deterministic template fallback failed (%s: %s)",
-                type(template_error).__name__, str(template_error)[:200],
-            )
+        # Tier 3: deterministic local template so schedules can still ship. A template
+        # cannot continue an arc, so series episodes fail loudly instead.
+        if series_episode_number is None:
+            try:
+                template_story = self._build_template_story(niche)
+                hook = template_story["hook"]
+                script = template_story["script"]
+                script = self._ensure_hook_starts_script(script, hook)
+                cta = self._choose_cta(niche)
+                script = self._append_cta(script, cta)
+                script = self._close_incomplete_sentence(script)
+                title_seed = template_story["title"]
+                logger.warning("[GeminiStoryEngine] Using deterministic template fallback for niche=%s", niche)
+                return StoryDraft(hook=hook, script=script, cta=cta, title_seed=title_seed)
+            except Exception as template_error:
+                logger.error(
+                    "[GeminiStoryEngine] Deterministic template fallback failed (%s: %s)",
+                    type(template_error).__name__, str(template_error)[:200],
+                )
 
         assert last_error is not None
         logger.error(
-            "[GeminiStoryEngine] Gemini failed after strict/relaxed/template fallbacks (%s: %s). Aborting.",
+            "[GeminiStoryEngine] Gemini failed after all fallbacks (%s: %s). Aborting.",
             type(last_error).__name__, str(last_error)[:200],
         )
         raise GeminiFailedError(f"{type(last_error).__name__}: {str(last_error)[:300]}") from last_error
@@ -419,7 +457,7 @@ class GeminiStoryEngine:
         self,
         niche: str,
         recent_scripts: list[str],
-        motif: str = "",
+        premise: dict | None = None,
         series_context: str = "",
         series_episode_number: int | None = None,
         series_name: str = "",
@@ -428,7 +466,14 @@ class GeminiStoryEngine:
         is_final_episode: bool = True,
         recent_titles: list[str] | None = None,
         recent_hooks: list[str] | None = None,
-    ) -> tuple[str, str, str, str]:
+        quality: str = QUALITY_NONE,
+        rejection_note: str = "",
+    ) -> StoryDraft:
+        premise = premise or pick_premise(niche)
+        is_series = series_episode_number is not None
+        is_cliffhanger_episode = is_series and not is_final_episode
+        mode = MODE_CLIFFHANGER if is_cliffhanger_episode else (MODE_FINALE if is_series else MODE_STANDALONE)
+
         # Summarize recent story openings so Gemini actively avoids them
         recent_openings = []
         for s in recent_scripts[:15]:
@@ -440,9 +485,12 @@ class GeminiStoryEngine:
             avoid_block = (
                 "\n\nCRITICAL: Do NOT start the story with ANY of these opening lines or anything similar:\n"
                 + "\n".join(recent_openings)
-                + "\nEvery story MUST have a completely different opening situation, character, and premise."
             )
-        blocked_tags = blocked_tags_override if blocked_tags_override is not None else self._recent_concept_tags(recent_scripts[:30])
+        # A series must reuse its own threat and objects, so novelty rules only apply to one-offs.
+        blocked_tags: set[str] = set()
+        if not is_series:
+            blocked_tags = blocked_tags_override if blocked_tags_override is not None else self._recent_concept_tags(recent_scripts[:30])
+            blocked_tags = blocked_tags - self._concept_tags(f"{premise['setting']} {premise['threat']}")
         if blocked_tags:
             avoid_block += (
                 "\n\nCONCEPT FRESHNESS: Avoid these recently used concepts: "
@@ -461,122 +509,125 @@ class GeminiStoryEngine:
                 "\n\nHOOK FRESHNESS: Do NOT reuse or closely resemble any of these previously "
                 "used hook sentences: " + "; ".join(h[:100] for h in recent_hooks[:20])
             )
-        format_instruction = random.choice(STORY_FORMATS)
-        is_cliffhanger_episode = bool(series_context.strip()) and not is_final_episode
-        if is_cliffhanger_episode:
+        if rejection_note:
+            avoid_block += f"\n\nYOUR PREVIOUS ATTEMPT WAS REJECTED. Fix this: {rejection_note[:300]}"
+
+        if mode == MODE_CLIFFHANGER:
             ending_requirement = (
-                "* End on a CLIFFHANGER, not a resolved twist — cut away at the moment of "
-                "maximum tension, right as the threat or mystery is about to be revealed. Do "
-                "NOT explain or resolve what is happening. The viewer must feel the story is "
-                "unfinished and urgently want to know what happens next."
+                "* End on a CLIFFHANGER: this episode reveals something real, then cuts away at "
+                "the moment of maximum tension. The last line must be a concrete event that leads "
+                "straight into the next episode, never vague dread."
             )
-            beat4_instruction = (
-                "4. **Cliffhanger Cutoff (50-60 sec):** Escalate to the single most tense "
-                "moment, then STOP mid-threat. No resolution, no twist reveal — just dread and "
-                "an open question."
+            final_beat = (
+                "4. **Cliffhanger cut (last 15%):** Escalate to the most tense moment, then stop. "
+                "Do not resolve the series' main question."
+            )
+            plan_note = (
+                '"central_question": what this episode asks, "answer": what this episode reveals, '
+                '"protagonist_fate": where the episode leaves them, "planted_clue": the detail that '
+                "points at the next episode"
             )
         else:
             ending_requirement = (
-                "* End with an **unexpected twist ending** that reframes everything — the "
-                "final line must be the most memorable and creepy line in the whole story."
+                "* The story must be COMPLETE. Answer the central question out loud in the script, "
+                "and make the protagonist's fate unmistakable. The viewer must never wonder what "
+                "happened. Do not imply a sequel, or that it is only the beginning."
             )
-            beat4_instruction = (
-                "4. **Twist Ending (50-60 sec):** Single gut-punch line that reframes "
-                "everything. Must be the shortest, most memorable sentence in the story."
+            final_beat = (
+                "4. **Payoff (last 15%):** Answer the central question using the planted clue. "
+                "Finish on one short, memorable sentence that closes the story."
+            )
+            plan_note = (
+                '"central_question": the one question the story raises, "answer": its specific '
+                'answer, "protagonist_fate": exactly what happens to them, "planted_clue": an early '
+                "detail that the ending pays off"
             )
         continuity_block = ""
-        if series_context.strip():
+        if is_series:
             continuity_block = (
-                "\n\nSERIES CONTINUITY MODE:\n"
+                "\n\nSERIES MODE (one continuous story across episodes):\n"
                 f"- Series name: {series_name or 'Unnamed Series'}\n"
-                f"- Current episode: {series_episode_number or 'unknown'}\n"
-                "- This episode MUST continue directly from prior events.\n"
-                "- Reuse key entities, unresolved threat, and consequences from previous episodes.\n"
-                "- Do NOT reset premise as a fresh standalone story.\n"
-                "- Advance the arc with new revelations while preserving internal logic.\n"
-                "- Prior context:\n"
+                f"- Current episode: {series_episode_number}\n"
+                "- Follow the series plan exactly. Keep the same protagonist, setting and threat.\n"
+                "- From episode 2 onward, the hook picks up the instant the previous episode ended, "
+                "and the first two sentences briefly restate what just happened so a new viewer "
+                "can follow along.\n"
+                "- Plant what the next episode needs. Never contradict earlier episodes.\n"
                 f"{series_context}\n"
             )
 
-        prompt = f"""You are an expert short-form storyteller for YouTube Shorts. Generate a **high-retention story** for a ~60-second video in the genres of **Horror, Mystery, Paranormal, Thriller, Urban Legend, Psychological Fear, Supernatural, or Dark Twist**.
+        prompt = f"""You are an expert short-form storyteller for YouTube Shorts. Write one high-retention {niche.replace('_', ' ')} story for narration.
 
-The voiceover is read at a fast pace (+50% speed). At that speed, **130–140 words fills exactly 60 seconds**. Do NOT write more or fewer — overage gets cut off, underage leaves dead air.
+### Assigned premise (mandatory, do not swap any of these):
+{describe_premise(premise, include_ending=mode != MODE_CLIFFHANGER)}
 
 ### Requirements:
 
-* Length: **exactly 130–140 words** (story only — no CTA, no sign-off)
-* Start the script with the exact hook sentence. The first 10 seconds must be impossible to ignore.
-* Use **second-person perspective** ("You hear...", "You open the door...", "Your phone rings...") in the hook and at key moments to pull the viewer directly into the story.
+* Length: **130 to 140 words** (story only, no CTA, no sign-off). Count them.
+* Start the script with the exact hook sentence.
+* Open directly on the impossible or dangerous detail. Do NOT open with stock actions like "You find", "You open", "You wake", "You receive", "I woke", or "It started".
 * In the first 30 words, include one disturbing question, impossible discovery, or immediate danger.
-* **Vary sentence length deliberately.** Use short punchy sentences (3–6 words) at the hook and the final twist. Use longer sentences (10–15 words) in the build-up. This creates natural dramatic pacing in the narration.
-* Maintain suspense every few lines.
-* Use simple, visceral, cinematic language.
-* Include 1 main character only (unless necessary).
-* Use a MIX of character names — American (Jake, Emma, Ryan, Sarah, Tyler, Ashley, Michael, Jessica, Chris, Melissa), British (Oliver, Charlotte, Harry, Amelia, James, Sophie, George, Lily, Thomas, Isabelle), or Indian (Riya, Arjun, Meera, Kabir, Priya, Dev, Ananya, Vikram). Do NOT always use Indian names — vary nationality each story.
-* Story should feel realistic at first, then become deeply disturbing.
+* Vary sentence length: short punchy sentences at the hook and the ending, longer ones in the build-up.
+* Use simple, visceral, cinematic language. One main character unless the premise needs more.
+* Vary character names and nationality across American, British and Indian names.
+* The story should feel realistic at first, then become deeply disturbing.
 {ending_requirement}
-* Story format for this generation: {format_instruction}
-* Keep the visual atmosphere compatible with this motif: {motif}
-* Avoid slow setup, backstory, or unnecessary details. Every sentence must earn its place.
-* DO NOT include any CTA, subscribe line, or sign-off — the story ends cold on the twist.
-* DO NOT use: ellipsis (...), em dashes (—), asterisks, or markdown formatting in the script.
-* Write in plain prose — no bullet points, no headers, no special characters.
+* DO NOT include any CTA, subscribe line, or sign-off.
+* DO NOT use ellipsis, em dashes, asterisks, quotation marks, or markdown in the script. Report speech without quotation marks.
 
-### 4-Beat Structure (strict):
+### Structure (strict):
 
-1. **Hook (0–5 sec):** One or two short punchy sentences. Impossible situation. Immediate dread.
-2. **Build-up (5–40 sec):** Strange events escalate. Each sentence raises the stakes. Longer sentences build pressure.
-3. **Reveal (40–50 sec):** The terrifying truth surfaces. Short sharp sentences increase pace.
-{beat4_instruction}
-
-### Tone:
-
-Dark, visceral, binge-worthy, cinematic. Every word should feel earned.
-
-### Example Hooks (create your OWN completely unique hook — do NOT copy or resemble these):
-
-* You hear knocking from inside your own walls.
-* The voicemail was from your number. You haven't left home in three days.
-* You found a photo of yourself sleeping — dated tomorrow.
-* The babysitter called. Your kids were fine. You don't have kids.
-* Your reflection moved a second after you did.
+1. **Hook (first 5%):** One or two short sentences. Immediate dread.
+2. **Build-up (to 65%):** Events escalate and the planted clue appears.
+3. **Reveal (to 85%):** The truth surfaces. Short sharp sentences.
+{final_beat}
 {avoid_block}
 {continuity_block}
 
+### Plan first:
+Before writing, fill in "plan" with: {plan_note}, "central_object": the one thing this story is about.
+
+### On-screen fields:
+* "hook_card": 3 to 5 words for a title card, adding intrigue without repeating the hook.
+* "on_screen_text": up to 6 words matching the format, such as the rule being broken. Empty if not needed.
+
 ### Titles:
-Create 3 distinct clickable YouTube Shorts title options, each under 58 characters. Each must feel complete, specific, and curiosity-driven — lead with the twist or the impossible situation, not the setup. No hashtags, markdown, quotes, ellipsis, or trailing incomplete phrases.
+Give 3 distinct clickable title options under 58 characters. Complete, specific, curiosity-driven. No hashtags, markdown, quotes, or ellipsis.
 
-### Scene Queries:
-Provide 6 specific Pexels video search queries that match distinct visual moments in this story — one per scene beat (e.g. "dark empty hospital corridor flickering lights", "abandoned house night fog", "woman alone dark parking garage", "shadowy figure doorway", "closeup hand old key", "foggy forest night path"). Each query must be a different scene/location — do NOT repeat similar scenes. Be specific — generic queries like "horror" or "dark" are useless.
+### Scenes:
+Give 6 to 8 "scenes" in story order, each matching the narration at that moment. "first_words" is the exact first four words of the sentence where the shot begins; the first scene begins at the very start. "query" is a 2 to 5 word Pexels stock video search for something common that actually exists on video, dark or at night where it fits (such as "empty motel corridor night" or "hand on door handle"). Each must be a different shot. Never search for impossible objects.
 
-Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw JSON object:
-{{"hook": "<opening hook sentence only>", "title": "<best title under 58 chars>", "title_alt_1": "<second title option>", "title_alt_2": "<third title option>", "scene_queries": ["<query 1>", "<query 2>", "<query 3>", "<query 4>", "<query 5>", "<query 6>"], "script": "<130-140 word story starting with the exact hook and ending on the twist — no CTA>"}}"""
+### Key visual:
+"key_visual" is the single most striking moment: "first_words" as above and "image_prompt", a one-sentence vertical cinematic description of it with no text and no recognizable real people.
 
+Respond with ONLY valid JSON in exactly this shape:
+{{"plan": {{"central_question": "", "answer": "", "protagonist_fate": "", "planted_clue": "", "central_object": ""}}, "hook": "<opening hook sentence only>", "hook_card": "", "on_screen_text": "", "title": "", "title_alt_1": "", "title_alt_2": "", "scenes": [{{"first_words": "", "query": ""}}], "key_visual": {{"first_words": "", "image_prompt": ""}}, "script": "<story starting with the exact hook>"}}"""
 
-        response = self._model.generate_content(
+        response = self._generate_story_content(
             prompt,
-            generation_config=genai.types.GenerationConfig(
+            genai.types.GenerationConfig(
                 temperature=1.0,
                 top_p=0.95,
-                max_output_tokens=2048,
+                # Generous because thinking models spend output tokens before the JSON.
+                max_output_tokens=8192,
+                response_mime_type="application/json",
             ),
         )
-        text = response.text.strip()
-
-        # Strip markdown code fences if Gemini wraps in them
-        text = re.sub(r"^```(?:json)?\s*\n?", "", text, flags=re.MULTILINE)
-        text = re.sub(r"\n?```\s*$", "", text, flags=re.MULTILINE)
-        text = text.strip()
-
-        parsed = json.loads(text)
+        parsed = self._parse_json(response.text)
         hook = parsed["hook"].strip()
         script = parsed["script"].strip()
         script = self._ensure_hook_starts_script(script, hook)
-        self._enforce_concept_freshness(script, blocked_tags, fail_overlap_count=overlap_fail_count)
+        if quality != QUALITY_NONE:
+            self._enforce_concept_freshness(script, blocked_tags, fail_overlap_count=overlap_fail_count)
+            if quality == QUALITY_STRICT:
+                self._enforce_opening_variety(hook, recent_hooks, is_series)
 
         script = self._close_incomplete_sentence(script)
+        plan = parsed.get("plan") if isinstance(parsed.get("plan"), dict) else {}
+        self._enforce_quality(script, plan, mode, quality, series_context)
 
-        cta = random.choice(CTA_BUCKETS["cliffhanger"]) if is_cliffhanger_episode else self._choose_cta(niche)
+        story_body = script
+        cta = self._series_cta(series_episode_number) if is_cliffhanger_episode else self._choose_cta(niche)
         script = self._append_cta(script, cta)
 
         # Pick the best title from up to 3 variants Gemini returned.
@@ -590,15 +641,256 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
 
         self._enforce_title_hook_freshness(hook, title_seed, recent_hooks, recent_titles)
 
-        scene_queries = [q.strip() for q in parsed.get("scene_queries", []) if isinstance(q, str) and q.strip()]
+        scenes = self._locate_scenes(story_body, parsed.get("scenes"))
+        scene_queries = [s["query"] for s in scenes] or [
+            q.strip() for q in parsed.get("scene_queries", []) if isinstance(q, str) and q.strip()
+        ]
+        key_visual = self._locate_key_visual(story_body, parsed.get("key_visual"))
 
-        word_count = len(script.split())
         logger.info(
-            "[GeminiStoryEngine] Generated niche=%s words=%d cta='%s' hook='%s...' scene_queries=%s",
-            niche, word_count, cta, hook[:50], scene_queries,
+            "[GeminiStoryEngine] Generated niche=%s words=%d mode=%s cta='%s' hook='%s...' scene_queries=%s",
+            niche, len(story_body.split()), mode, cta, hook[:50], scene_queries,
+        )
+        return StoryDraft(
+            hook=hook,
+            script=script,
+            cta=cta,
+            title_seed=title_seed,
+            scene_queries=scene_queries,
+            scenes=scenes,
+            hook_card=self._clean_hook_card(parsed.get("hook_card", "")),
+            on_screen_text=self._clean_on_screen_text(parsed.get("on_screen_text", "")),
+            plan=plan,
+            key_visual=key_visual,
         )
 
-        return hook, script, cta, title_seed, scene_queries
+    def _generate_story_content(self, prompt: str, config):
+        """Use the writing model, dropping to the fallback if it is retired or out of quota."""
+        try:
+            return self._model.generate_content(prompt, generation_config=config, request_options=REQUEST_OPTIONS)
+        except Exception as e:
+            fallback = getattr(self, "_fallback_model", None)
+            if fallback is None or not re.search(r"404|not found|429|quota", str(e), re.IGNORECASE):
+                raise
+            logger.warning("[GeminiStoryEngine] Story model unavailable (%s), using fallback", str(e)[:120])
+            return fallback.generate_content(prompt, generation_config=config, request_options=REQUEST_OPTIONS)
+
+    @staticmethod
+    def _parse_json(text: str):
+        text = (text or "").strip()
+        text = re.sub(r"^```(?:json)?\s*\n?", "", text, flags=re.MULTILINE)
+        text = re.sub(r"\n?```\s*$", "", text, flags=re.MULTILINE)
+        return json.loads(text.strip())
+
+    def _enforce_opening_variety(self, hook: str, recent_hooks: list[str], is_series: bool) -> None:
+        """Reject hooks that open with the same two words as one of the last few."""
+        if is_series:
+            return
+        opening = self._normalize_for_dedup(hook).split()[:2]
+        for prior in recent_hooks[:RECENT_HOOK_OPENINGS]:
+            if opening and opening == self._normalize_for_dedup(prior).split()[:2]:
+                raise ValueError(f"{QUALITY_ERROR_PREFIX}: hook opens like a recent one ({' '.join(opening)})")
+
+    def _enforce_quality(self, story: str, plan: dict, mode: str, quality: str, series_context: str) -> None:
+        if quality == QUALITY_NONE:
+            return
+        low, high = STRICT_WORD_RANGE if quality == QUALITY_STRICT else RELAXED_WORD_RANGE
+        words = len(story.split())
+        if not low <= words <= high:
+            raise ValueError(f"{QUALITY_ERROR_PREFIX}: story is {words} words, needs {low}-{high}")
+        last_word = self._normalize_for_dedup(story).split()[-1]
+        if last_word in DANGLING_LAST_WORDS:
+            raise ValueError(f"{QUALITY_ERROR_PREFIX}: story ends mid-thought on '{last_word}'")
+
+        passed, reason = self._review_story(story, plan, mode, series_context)
+        if passed:
+            return
+        if quality == QUALITY_STRICT:
+            raise ValueError(f"{QUALITY_ERROR_PREFIX}: {reason}")
+        logger.warning("[GeminiStoryEngine] Shipping despite review on relaxed pass: %s", reason)
+
+    def _review_story(self, story: str, plan: dict, mode: str, series_context: str) -> tuple[bool, str]:
+        """Independent pass/fail read. A broken reviewer must never block publishing."""
+        criteria = {
+            MODE_STANDALONE: (
+                "The central question is answered explicitly in the story. The protagonist's fate "
+                "is clear. Nothing important is left dangling. It feels finished and does not "
+                "imply a sequel."
+            ),
+            MODE_CLIFFHANGER: (
+                "It continues directly from any earlier episodes and contradicts none of them. It "
+                "reveals something new. It ends unresolved on a concrete event that leads into "
+                "the next episode in the plan."
+            ),
+            MODE_FINALE: (
+                "It continues directly from the earlier episodes. It answers the series' main "
+                "question with the planned final truth. The protagonist's fate is clear and it "
+                "feels like a finished ending."
+            ),
+        }[mode]
+        prompt = (
+            "You are a strict story editor. Decide whether this short story meets every criterion.\n"
+            f"Criteria: {criteria}\n"
+            f"Writer's plan: {json.dumps(plan)}\n"
+            f"{series_context}\n\n"
+            f"Story to judge:\n{story}\n\n"
+            'Respond with ONLY JSON: {"passes": true or false, "reason": "one sentence on what to fix"}'
+        )
+        try:
+            model = getattr(self, "_check_model", None) or self._model
+            response = model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.1, max_output_tokens=4096, response_mime_type="application/json",
+                ),
+                request_options=REQUEST_OPTIONS,
+            )
+            verdict = self._parse_json(response.text)
+            return bool(verdict["passes"]), str(verdict.get("reason", ""))[:300]
+        except Exception as e:
+            logger.warning("[GeminiStoryEngine] Story review unavailable (%s), not blocking", str(e)[:160])
+            return True, ""
+
+    @classmethod
+    def _word_tokens(cls, text: str) -> list[str]:
+        return re.sub(r"[^a-z0-9\s]", "", (text or "").lower()).split()
+
+    @classmethod
+    def _find_word_index(cls, tokens: list[str], first_words: str, start: int = 0) -> int | None:
+        target = cls._word_tokens(first_words)[:5]
+        if not target:
+            return None
+        for i in range(start, len(tokens) - len(target) + 1):
+            if tokens[i:i + len(target)] == target:
+                return i
+        return None
+
+    @classmethod
+    def _locate_scenes(cls, story: str, raw_scenes) -> list[dict]:
+        """Anchor each scene to a word position in the narration, in story order."""
+        if not isinstance(raw_scenes, list):
+            return []
+        cleaned = [
+            s for s in raw_scenes
+            if isinstance(s, dict) and isinstance(s.get("query"), str) and s["query"].strip()
+        ][:MAX_SCENES]
+        if not cleaned:
+            return []
+        tokens = cls._word_tokens(story)
+        indices: list[int | None] = []
+        cursor = 0
+        for s in cleaned:
+            found = cls._find_word_index(tokens, str(s.get("first_words", "")), cursor)
+            indices.append(found)
+            if found is not None:
+                cursor = found + 1
+        indices[0] = 0
+        # Unmatched scenes are spread evenly between their matched neighbours.
+        i = 0
+        while i < len(indices):
+            if indices[i] is not None:
+                i += 1
+                continue
+            j = i
+            while j < len(indices) and indices[j] is None:
+                j += 1
+            left = indices[i - 1]
+            right = indices[j] if j < len(indices) else len(tokens)
+            step = (right - left) / (j - i + 1)
+            for k in range(i, j):
+                indices[k] = int(left + step * (k - i + 1))
+            i = j
+        scenes, last = [], -1
+        for s, index in zip(cleaned, indices):
+            if index > last:
+                scenes.append({"query": s["query"].strip(), "word_index": index})
+                last = index
+        return scenes
+
+    @classmethod
+    def _locate_key_visual(cls, story: str, raw) -> dict | None:
+        if not isinstance(raw, dict) or not str(raw.get("image_prompt", "")).strip():
+            return None
+        index = cls._find_word_index(cls._word_tokens(story), str(raw.get("first_words", "")))
+        if index is None:
+            return None
+        return {"image_prompt": str(raw["image_prompt"]).strip(), "word_index": index}
+
+    @staticmethod
+    def _clean_hook_card(text) -> str:
+        words = re.sub(r"[^\w\s'?!-]", "", str(text or "")).split()
+        return " ".join(words) if 2 <= len(words) <= 6 else ""
+
+    @staticmethod
+    def _clean_on_screen_text(text) -> str:
+        words = re.sub(r"[^\w\s':#-]", "", str(text or "")).split()
+        return " ".join(words[:6])
+
+    def generate_series_bible(self, niche: str, premise: dict, planned_episodes: int, published_episodes: str = "") -> dict:
+        """Plan the whole arc up front so every episode knows the past and the next one."""
+        honor = (
+            f"\n\nThese episodes are ALREADY PUBLISHED. Keep them exactly and plan around them:\n{published_episodes}\n"
+            if published_episodes.strip() else ""
+        )
+        prompt = f"""Plan a {planned_episodes}-episode YouTube Shorts {niche.replace('_', ' ')} serial with one continuous story. Each episode is about 135 narrated words.
+
+Assigned premise (mandatory):
+{describe_premise(premise)}{honor}
+
+Rules:
+* One protagonist, one setting, one threat for the whole series.
+* Every episode except the last reveals something new and ends on a specific cliffhanger.
+* Each episode must begin from the previous episode's exact cliffhanger.
+* The last episode answers the central question with the final truth and states the protagonist's fate.
+
+Respond with ONLY JSON in exactly this shape, with one "episodes" entry per episode:
+{{"protagonist": "<name and one defining detail>", "central_question": "", "final_truth": "<the answer, decided now>", "rules": "<how the threat works>", "episodes": [{{"number": 1, "events": "<what happens>", "reveal": "<what is learned>", "ending": "<exact cliffhanger, or the resolution for the last episode>"}}]}}"""
+        last_error: Exception | None = None
+        for attempt in range(1, 4):
+            try:
+                response = self._generate_story_content(
+                    prompt,
+                    genai.types.GenerationConfig(
+                        temperature=0.9, max_output_tokens=8192, response_mime_type="application/json",
+                    ),
+                )
+                bible = self._parse_json(response.text)
+                episodes = bible.get("episodes")
+                if not isinstance(episodes, list) or len(episodes) != planned_episodes:
+                    raise ValueError("Series plan has the wrong number of episodes")
+                for field in ("protagonist", "central_question", "final_truth"):
+                    if not str(bible.get(field, "")).strip():
+                        raise ValueError(f"Series plan is missing {field}")
+                for number, episode in enumerate(episodes, start=1):
+                    episode["number"] = number
+                bible["premise"] = premise
+                return bible
+            except Exception as e:
+                last_error = e
+                logger.warning("[GeminiStoryEngine] Series plan attempt %d failed: %s", attempt, str(e)[:180])
+        raise ValueError(f"Could not plan series: {last_error}")
+
+    @staticmethod
+    def format_series_plan(bible: dict, episode_number: int) -> str:
+        """The writer's view of the arc: what came before, this episode, and what follows."""
+        episodes = {e.get("number"): e for e in bible.get("episodes", [])}
+
+        def describe(number: int) -> str:
+            e = episodes.get(number, {})
+            return f"events: {e.get('events', '')} | reveal: {e.get('reveal', '')} | ending: {e.get('ending', '')}"
+
+        lines = [
+            "SERIES PLAN (private to the writer):",
+            f"- Protagonist: {bible.get('protagonist', '')}",
+            f"- Central question: {bible.get('central_question', '')}",
+            f"- How the threat works: {bible.get('rules', '')}",
+            f"- Final truth (only state this outright in the last episode): {bible.get('final_truth', '')}",
+        ]
+        lines += [f"- Episode {n} (already told): {describe(n)}" for n in sorted(episodes) if n < episode_number]
+        lines.append(f"- THIS EPISODE ({episode_number}): {describe(episode_number)}")
+        if episode_number + 1 in episodes:
+            lines.append(f"- NEXT EPISODE ({episode_number + 1}), set this up: {describe(episode_number + 1)}")
+        return "\n".join(lines)
 
     _CTA_POOL = [
         "If this scared you, smash Like before it finds you.",
@@ -637,14 +929,14 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
         bucket = random.choice(list(CTA_BUCKETS.values()))
         return random.choice(pool + bucket)
 
-    def _select_visual_motif(self) -> str:
-        iso_week = datetime.now().isocalendar().week
-        return VISUAL_MOTIFS[iso_week % len(VISUAL_MOTIFS)]
+    @staticmethod
+    def _series_cta(episode_number: int) -> str:
+        """Point at the actual next episode; only used on cliffhanger episodes."""
+        return random.choice(SERIES_CTA_TEMPLATES).format(next=episode_number + 1)
 
-    def _build_pexels_queries(self, niche_data: dict, motif: str) -> list[str]:
+    def _build_pexels_queries(self, niche_data: dict) -> list[str]:
         base_queries = niche_data.get("pexels_queries", ["dark horror scene", "night horror", "scary dark"])
-        motif_queries = [f"{q} {motif}" for q in base_queries[:4]]
-        return list(dict.fromkeys(motif_queries + base_queries))
+        return list(dict.fromkeys(base_queries))
 
     def _concept_tags(self, text: str) -> set[str]:
         normalized = re.sub(r"\s+", " ", (text or "").lower())
@@ -702,6 +994,10 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
                 or self._is_near_duplicate(title, prior_title)
             ):
                 raise ValueError(f"Title too similar to a recently used title: '{prior_title[:80]}'")
+
+    @staticmethod
+    def _is_quality_error(err: Exception | None) -> bool:
+        return err is not None and QUALITY_ERROR_PREFIX in str(err)
 
     def _is_concept_overlap_error(self, err: Exception | None) -> bool:
         if err is None:
@@ -841,8 +1137,10 @@ Respond with ONLY valid JSON. No explanation, no markdown fences, just the raw J
         return f"{title}{suffix}"
 
     def _clean_title(self, title: str) -> str:
-        title = re.sub(r"#\w+", "", title or "")
-        title = re.sub(r"[\"'`*_]+", "", title)
+        title = re.sub(r"#\w+", "", title or "").replace("’", "'")
+        # Apostrophes inside words stay ("Aarav's"); quote marks around phrases go.
+        title = re.sub(r"(?<![A-Za-z])'|'(?![A-Za-z])", "", title)
+        title = re.sub(r"[\"“”`*_]+", "", title)
         title = title.replace("...", " ")
         title = title.replace("—", " ").replace("–", " ")
         title = re.sub(r"\s+", " ", title).strip(" .,:;-")

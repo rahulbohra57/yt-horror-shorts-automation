@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     YOUTUBE_API_KEY: str = ""
     YOUTUBE_CHANNEL_HANDLE: str = ""
     GEMINI_API_KEY: str = ""
+    GEMINI_STORY_MODEL: str = "gemini-3.5-flash"
+    GEMINI_CHECK_MODEL: str = "gemini-2.5-flash-lite"
+    AI_STILLS_ENABLED: bool = False
+    AI_STILL_MODEL: str = "gemini-2.5-flash-image"
     GDRIVE_SERVICE_ACCOUNT_JSON: str = ""
     GDRIVE_FOLDER_ID: str = ""
     CLOUDINARY_CLOUD_NAME: str = ""

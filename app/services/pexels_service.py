@@ -4,9 +4,12 @@ import logging
 import random
 import requests
 import time
+from io import BytesIO
 from pathlib import Path
 from time import sleep
 from urllib.parse import quote_plus
+
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +18,11 @@ PEXELS_VIDEO_URL = "https://api.pexels.com/videos/search"
 _PEXELS_PER_PAGE = 15
 # How long a Pexels video id is considered "recently used" and avoided in new picks
 _USED_ID_RETENTION_SECONDS = 45 * 24 * 3600
+# Mean preview luminance (0-255) above which a clip is too bright for this channel
+_MAX_PREVIEW_BRIGHTNESS = 115
+# Below this a clip reads as a black screen once graded
+_MIN_PREVIEW_BRIGHTNESS = 18
+_MAX_BRIGHTNESS_CHECKS = 6
 
 
 class PexelsService:
@@ -118,6 +126,7 @@ class PexelsService:
                     "url": best["link"],
                     "width": best["width"],
                     "height": best["height"],
+                    "image": video.get("image"),
                 })
 
         # Prefer videos not recently used elsewhere to avoid the same stock
@@ -126,13 +135,40 @@ class PexelsService:
         fresh = [c for c in candidates if str(c["id"]) not in self._used_ids]
         pool = fresh if fresh else candidates
 
-        results = pool[:count]
+        results = self._prefer_dark(pool)[:count]
         if results:
             now = time.time()
             for r in results:
                 self._used_ids[str(r["id"])] = now
             self._save_used_ids()
         return results
+
+    def _prefer_dark(self, candidates: list[dict]) -> list[dict]:
+        """Check preview frames, avoiding clips too bright for horror or too dark to see."""
+        checked = []
+        for candidate in candidates[:_MAX_BRIGHTNESS_CHECKS]:
+            checked.append((self._preview_brightness(candidate.get("image")), candidate))
+        usable = [
+            c for level, c in checked
+            if level is None or _MIN_PREVIEW_BRIGHTNESS <= level <= _MAX_PREVIEW_BRIGHTNESS
+        ]
+        rejected = [(level, c) for level, c in checked if c not in usable]
+        rejected.sort(key=lambda item: abs(item[0] - _MAX_PREVIEW_BRIGHTNESS))
+        return usable + [c for _, c in rejected] + candidates[_MAX_BRIGHTNESS_CHECKS:]
+
+    @staticmethod
+    def _preview_brightness(image_url: str | None) -> float | None:
+        """Mean luminance from 0 to 255, or None if the preview can't be judged."""
+        if not image_url:
+            return None
+        try:
+            resp = requests.get(image_url, timeout=10)
+            resp.raise_for_status()
+            frame = Image.open(BytesIO(resp.content)).convert("L").resize((32, 32))
+            return sum(frame.getdata()) / (32 * 32)
+        except Exception:
+            logger.debug("Could not check preview brightness for %s", image_url, exc_info=True)
+            return None
 
     def _pick_best_file(self, files: list) -> dict | None:
         portrait = [f for f in files if f.get("height", 0) > f.get("width", 0)]

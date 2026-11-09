@@ -26,7 +26,8 @@ def test_gemini_uses_niche_cta_pool():
     }
     engine._model = DummyGeminiModel()
 
-    hook, script, cta, title_seed, scene_queries = engine._call_gemini("horror", [])
+    draft = engine._call_gemini("horror", [])
+    hook, script, cta, title_seed = draft.hook, draft.script, draft.cta, draft.title_seed
 
     assert hook == "The old phone rang from inside the wall."
     assert title_seed == "The Phone Inside The Wall"
@@ -95,17 +96,16 @@ def test_non_final_series_episode_gets_cliffhanger_ending_and_cta():
     engine._niches = {"horror": {}}
     engine._model = DummySeriesGeminiModel()
 
-    hook, script, cta, title_seed, scene_queries = engine._call_gemini(
+    cta = engine._call_gemini(
         "horror",
         [],
         series_context="EP1 TITLE: The Voice\nEP1 SUMMARY: A voice answered back.",
         series_episode_number=2,
         series_name="The Monitor Files",
         is_final_episode=False,
-    )
+    ).cta
 
-    from app.services.gemini_story_engine import CTA_BUCKETS
-    assert cta in CTA_BUCKETS["cliffhanger"]
+    assert "Part 3" in cta or "part 3" in cta
 
 
 def test_final_series_episode_keeps_normal_cta_pool():
@@ -113,14 +113,14 @@ def test_final_series_episode_keeps_normal_cta_pool():
     engine._niches = {"horror": {"ctas": ["Follow for the next nightmare."]}}
     engine._model = DummySeriesGeminiModel()
 
-    hook, script, cta, title_seed, scene_queries = engine._call_gemini(
+    cta = engine._call_gemini(
         "horror",
         [],
         series_context="EP1 TITLE: The Voice\nEP1 SUMMARY: A voice answered back.",
         series_episode_number=3,
         series_name="The Monitor Files",
         is_final_episode=True,
-    )
+    ).cta
 
     assert cta == "Follow for the next nightmare."
 
@@ -130,7 +130,7 @@ def test_standalone_short_defaults_to_final_episode_behavior():
     engine._niches = {"horror": {"ctas": ["Follow for the next nightmare."]}}
     engine._model = DummySeriesGeminiModel()
 
-    hook, script, cta, title_seed, scene_queries = engine._call_gemini("horror", [])
+    cta = engine._call_gemini("horror", []).cta
 
     assert cta == "Follow for the next nightmare."
 

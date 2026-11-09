@@ -1,3 +1,4 @@
+import json
 import random
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -89,24 +90,37 @@ class SeriesService:
         )
 
     def get_series_continuity_context(self, session, series_id: int, episode_number: int) -> str:
+        """Full narration of every earlier episode, so endings are never lost."""
         rows = (
-            session.query(SeriesEpisode.episode_number, Short.title, Short.script)
+            session.query(SeriesEpisode.episode_number, Short.script, Short.cta)
             .join(Short, Short.id == SeriesEpisode.short_id)
             .filter(SeriesEpisode.series_id == series_id, SeriesEpisode.episode_number < episode_number)
             .order_by(SeriesEpisode.episode_number.asc())
             .all()
         )
-        if not rows:
-            return ""
+        sections: list[str] = []
+        for ep_no, script, cta in rows:
+            narration = (script or "").strip()
+            if cta and narration.endswith(cta.strip()):
+                narration = narration[: -len(cta.strip())].strip()
+            if narration:
+                sections.append(f"EPISODE {ep_no} NARRATION:\n{narration}")
+        return "\n\n".join(sections)
 
-        lines: list[str] = []
-        for ep_no, title, script in rows[-3:]:
-            story_preview = (script or "").strip().replace("\n", " ")
-            if len(story_preview) > 260:
-                story_preview = story_preview[:260].rsplit(" ", 1)[0] + "..."
-            lines.append(f"EP{ep_no} TITLE: {title or ''}")
-            lines.append(f"EP{ep_no} SUMMARY: {story_preview}")
-        return "\n".join(lines)
+    def get_bible(self, session, series_id: int) -> dict | None:
+        series = session.query(StorySeries).filter(StorySeries.id == series_id).first()
+        if not series or not series.bible:
+            return None
+        try:
+            return json.loads(series.bible)
+        except (TypeError, ValueError):
+            return None
+
+    def save_bible(self, session, series_id: int, bible: dict) -> None:
+        series = session.query(StorySeries).filter(StorySeries.id == series_id).first()
+        if series:
+            series.bible = json.dumps(bible)
+            session.commit()
 
     def ensure_playlist_id(self, session, series_id: int, playlist_id: str) -> None:
         series = session.query(StorySeries).filter(StorySeries.id == series_id).first()
